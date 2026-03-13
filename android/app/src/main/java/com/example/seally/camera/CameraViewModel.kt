@@ -6,6 +6,7 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,6 +22,7 @@ data class CameraUiState(
     val mIsStartupCameraLoading: Boolean = false,
     val mIsFrontCamera: Boolean = true,
     val mLandmarks: List<NormalizedLandmark> = emptyList(),
+    val mWorldLandmarks: List<Landmark> = emptyList(),
     val mErrorMessage: String? = null,
     val mFrameWidth: Int = 0,
     val mFrameHeight: Int = 0,
@@ -98,7 +100,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                         mResultListener = { result ->
                             if (!mSuppressLandmarkResults) {
                                 val firstPose = result.landmarks().firstOrNull().orEmpty()
-                                mUiState.value = mUiState.value.copy(mLandmarks = firstPose, mErrorMessage = null)
+                                val firstPoseWorld = result.worldLandmarks().firstOrNull().orEmpty()
+                                mUiState.value = mUiState.value.copy(
+                                    mLandmarks = firstPose,
+                                    mWorldLandmarks = firstPoseWorld,
+                                    mErrorMessage = null,
+                                )
                             }
                         },
                         mErrorListener = { message ->
@@ -170,10 +177,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearPoseOverlay() {
         val currentState = mUiState.value
-        if (currentState.mLandmarks.isEmpty() && currentState.mFrameWidth == 0 && currentState.mFrameHeight == 0) return
+        if (
+            currentState.mLandmarks.isEmpty() &&
+            currentState.mWorldLandmarks.isEmpty() &&
+            currentState.mFrameWidth == 0 &&
+            currentState.mFrameHeight == 0
+        ) return
 
         mUiState.value = currentState.copy(
             mLandmarks = emptyList(),
+            mWorldLandmarks = emptyList(),
             mFrameWidth = 0,
             mFrameHeight = 0,
         )
