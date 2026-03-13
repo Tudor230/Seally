@@ -1,36 +1,29 @@
-package com.example.seally.home
+package com.example.seally.exercises
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 
 @Composable
-fun HomeScreen(
+fun ExercisesScreen(
     modifier: Modifier = Modifier,
-    onProfileClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {},
+    onLeftActionClick: () -> Unit = {},
+    onRightActionClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val settingsSvgRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/settings_icon.png")
-        .decoderFactory(SvgDecoder.Factory())
-        .build()
 
     val headerImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/icons/line.png")
@@ -40,13 +33,16 @@ fun HomeScreen(
         .data("file:///android_asset/icons/skinny - no background.png")
         .build()
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Text(
-            text = "Home",
-            modifier = Modifier.align(Alignment.Center),
-        )
+    val calendarIconRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/calendar_icon - no background.png")
+        .build()
 
-        // Image placed under the top buttons (profile/settings)
+    val dumbbellIconRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/dumbbell_icon - no background.png")
+        .build()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // Top header image (same style as Home)
         AsyncImage(
             model = headerImageRequest,
             contentDescription = "Header image",
@@ -57,42 +53,45 @@ fun HomeScreen(
                 .size(220.dp),
         )
 
-        // Main character image centered above the bottom navigation bar
+        // Seal/character in the middle, above the bottom nav
         AsyncImage(
             model = skinnyImageRequest,
-            contentDescription = "Character",
+            contentDescription = "Seal",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                // Push it up so it sits above the bottom nav bar
-                .offset(y = (-92).dp)
-                .size(400.dp),
+                .offset(y = (-120).dp)
+                .size(340.dp),
         )
 
+        // Two action buttons bottom-left / bottom-right of the seal, above the nav bar
         IconButton(
-            onClick = onProfileClick,
+            onClick = onLeftActionClick,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(20.dp),
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 110.dp)
+                .semantics { contentDescription = "Dumbbell" },
         ) {
-            Icon(
-                imageVector = Icons.Default.AccountCircle,
-                contentDescription = "Profile",
-                modifier = Modifier.size(30.dp),
+            AsyncImage(
+                model = dumbbellIconRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(64.dp),
             )
         }
 
         IconButton(
-            onClick = onSettingsClick,
+            onClick = onRightActionClick,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp),
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 110.dp)
+                .semantics { contentDescription = "Calendar" },
         ) {
             AsyncImage(
-                model = settingsSvgRequest,
-                contentDescription = "Settings",
+                model = calendarIconRequest,
+                contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(60.dp),
+                modifier = Modifier.size(64.dp),
             )
         }
     }

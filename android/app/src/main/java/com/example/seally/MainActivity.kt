@@ -31,6 +31,7 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.camera.CameraViewModel
+import com.example.seally.exercises.ExercisesScreen
 import com.example.seally.home.HomeScreen
 import com.example.seally.ui.theme.SeallyTheme
 
@@ -96,8 +97,7 @@ fun SeallyApp() {
             AppDestinations.HOME -> HomeScreen(
                 modifier = Modifier.padding(innerPadding),
             )
-            AppDestinations.EXERCISES -> PlaceholderScreen(
-                title = "Exercises",
+            AppDestinations.EXERCISES -> ExercisesScreen(
                 modifier = Modifier.padding(innerPadding),
             )
         }
