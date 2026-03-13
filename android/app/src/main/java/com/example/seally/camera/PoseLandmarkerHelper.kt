@@ -54,6 +54,8 @@ class PoseLandmarkerHelper(
 
             val options = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
+                .setMinPoseDetectionConfidence(0.5f)
+                .setMinTrackingConfidence(0.5f)
                 .setRunningMode(RunningMode.LIVE_STREAM)
                 .setNumPoses(mNumPoses)
                 .setResultListener { result, _ ->
