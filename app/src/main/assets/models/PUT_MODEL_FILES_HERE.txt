@@ -1,0 +1,15 @@
+Put your downloaded MediaPipe pose models in this folder:
+
+app/src/main/assets/models/
+
+Expected filenames used by the current implementation:
+- pose_landmarker_lite.task
+- pose_landmarker_full.task  (default)
+- pose_landmarker_heavy.task
+
+Current default model path in code:
+- models/pose_landmarker_full.task
+
+If you want to switch default later, update:
+- app/src/main/java/com/example/seally/camera/CameraViewModel.kt
+
