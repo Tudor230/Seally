@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
@@ -32,6 +31,7 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.camera.CameraViewModel
+import com.example.seally.home.HomeScreen
 import com.example.seally.ui.theme.SeallyTheme
 
 class MainActivity : ComponentActivity() {
@@ -93,8 +93,7 @@ fun SeallyApp() {
                 title = "Goals",
                 modifier = Modifier.padding(innerPadding),
             )
-            AppDestinations.HOME -> PlaceholderScreen(
-                title = "Home",
+            AppDestinations.HOME -> HomeScreen(
                 modifier = Modifier.padding(innerPadding),
             )
             AppDestinations.EXERCISES -> PlaceholderScreen(
