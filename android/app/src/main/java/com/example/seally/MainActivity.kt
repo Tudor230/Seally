@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
 
 @PreviewScreenSizes
 @Composable
-fun SeallyApp() {
+fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXERCISES) }
     val context = LocalContext.current
 
