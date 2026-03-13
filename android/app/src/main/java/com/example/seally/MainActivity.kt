@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.home.HomeScreen
+import com.example.seally.nutrition.NutritionScreen
 import com.example.seally.ui.theme.SeallyTheme
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SeallyApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXERCISES) }
+    var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
     val context = LocalContext.current
     val cameraViewModel: CameraViewModel = viewModel()
 
@@ -67,27 +69,31 @@ fun SeallyApp() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar {
-                AppDestinations.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == currentDestination,
-                        onClick = { currentDestination = destination },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = destination.label,
-                            )
-                        },
-                        label = { Text(destination.label) },
-                    )
+            val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
+                shouldShowBottomBarForNutrition
+            if (shouldRenderBottomBar) {
+                NavigationBar {
+                    AppDestinations.entries.forEach { destination ->
+                        NavigationBarItem(
+                            selected = destination == currentDestination,
+                            onClick = { currentDestination = destination },
+                            icon = {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = destination.label,
+                                )
+                            },
+                            label = { Text(destination.label) },
+                        )
+                    }
                 }
             }
         },
     ) { innerPadding ->
         when (currentDestination) {
-            AppDestinations.NUTRITION -> PlaceholderScreen(
-                title = "Nutrition",
+            AppDestinations.NUTRITION -> NutritionScreen(
                 modifier = Modifier.padding(innerPadding),
+                onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
             )
             AppDestinations.GOALS -> PlaceholderScreen(
                 title = "Goals",
