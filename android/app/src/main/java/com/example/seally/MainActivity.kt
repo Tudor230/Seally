@@ -1,6 +1,7 @@
 package com.example.seally
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,18 +40,38 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SeallyTheme {
-                SeallyApp()
+                val cameraViewModel: CameraViewModel = viewModel()
+                val uiState by cameraViewModel.uiState.collectAsState()
+
+                LaunchedEffect(uiState.mFormFeedback.mProblematicJoints, uiState.mFormFeedback.mErrorMessage) {
+                    val resultIntent = Intent().apply {
+                        putStringArrayListExtra(
+                            EXTRA_PROBLEMATIC_JOINTS,
+                            ArrayList(uiState.mFormFeedback.mProblematicJoints),
+                        )
+                        putExtra(EXTRA_ERROR_MESSAGE, uiState.mFormFeedback.mErrorMessage)
+                    }
+                    setResult(RESULT_OK, resultIntent)
+                }
+
+                SeallyApp(mCameraViewModel = cameraViewModel)
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_PROBLEMATIC_JOINTS = "extra_problematic_joints"
+        const val EXTRA_ERROR_MESSAGE = "extra_error_message"
     }
 }
 
 @PreviewScreenSizes
 @Composable
-fun SeallyApp() {
+fun SeallyApp(
+    mCameraViewModel: CameraViewModel = viewModel(),
+) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.PROFILE) }
     val context = LocalContext.current
-    val cameraViewModel: CameraViewModel = viewModel()
 
     LaunchedEffect(Unit) {
         val hasCameraPermission = ContextCompat.checkSelfPermission(
@@ -58,7 +80,7 @@ fun SeallyApp() {
         ) == PackageManager.PERMISSION_GRANTED
 
         if (hasCameraPermission) {
-            cameraViewModel.preWarmPoseLandmarker()
+            mCameraViewModel.preWarmPoseLandmarker()
         }
     }
 
@@ -83,7 +105,7 @@ fun SeallyApp() {
             when (currentDestination) {
                 AppDestinations.HOME -> CameraScreen(
                     modifier = Modifier.padding(innerPadding),
-                    mViewModel = cameraViewModel,
+                    mViewModel = mCameraViewModel,
                 )
                 AppDestinations.FAVORITES -> Text("Favorites", modifier = Modifier.padding(innerPadding))
                 AppDestinations.PROFILE -> Text("Profile", modifier = Modifier.padding(innerPadding))
