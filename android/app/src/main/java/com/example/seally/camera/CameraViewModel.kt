@@ -1,6 +1,7 @@
 package com.example.seally.camera
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
@@ -13,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -26,6 +28,12 @@ data class CameraUiState(
     val mErrorMessage: String? = null,
     val mFrameWidth: Int = 0,
     val mFrameHeight: Int = 0,
+    val mSelectedExercise: ExerciseType = ExerciseType.SQUAT,
+    val mPullUpBarLeftX: Float? = null,
+    val mPullUpBarLeftY: Float? = null,
+    val mPullUpBarRightX: Float? = null,
+    val mPullUpBarRightY: Float? = null,
+    val mFormFeedback: FormFeedback = FormFeedback(),
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,6 +41,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     val uiState: StateFlow<CameraUiState> = mUiState.asStateFlow()
 
     private var mPoseLandmarkerHelper: PoseLandmarkerHelper? = null
+    private val mSquatFormFeedbackEngine = SquatFormFeedbackEngine()
+    private val mPlankFormFeedbackEngine = PlankFormFeedbackEngine()
+    private val mPullUpFormFeedbackEngine = PullUpFormFeedbackEngine()
     private var mIsPoseLandmarkerInitializing: Boolean = false
     @Volatile
     private var mAcceptFrames: Boolean = false
@@ -46,22 +57,28 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val currentState = mUiState.value
         val shouldShowStartupLoading = isInitialCheck && hasPermission
 
-        mUiState.value = currentState.copy(
-            mHasCameraPermission = hasPermission,
-            mHasCompletedInitialPermissionCheck = currentState.mHasCompletedInitialPermissionCheck || isInitialCheck,
-            mIsStartupCameraLoading = when {
-                !hasPermission -> false
-                shouldShowStartupLoading -> true
-                else -> currentState.mIsStartupCameraLoading
-            },
-            mErrorMessage = if (hasPermission) currentState.mErrorMessage else null,
-        )
+        mUiState.update {
+            it.copy(
+                mHasCameraPermission = hasPermission,
+                mHasCompletedInitialPermissionCheck = currentState.mHasCompletedInitialPermissionCheck || isInitialCheck,
+                mIsStartupCameraLoading = when {
+                    !hasPermission -> false
+                    shouldShowStartupLoading -> true
+                    else -> currentState.mIsStartupCameraLoading
+                },
+                mErrorMessage = if (hasPermission) currentState.mErrorMessage else null,
+            )
+        }
 
         if (!hasPermission) {
             mAcceptFrames = false
             mPoseLandmarkerHelper?.clear()
             mPoseLandmarkerHelper = null
             mIsPoseLandmarkerInitializing = false
+            mSquatFormFeedbackEngine.reset()
+            mPlankFormFeedbackEngine.reset()
+            mPullUpFormFeedbackEngine.reset()
+            mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
             return
         }
 
@@ -101,18 +118,37 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                             if (!mSuppressLandmarkResults) {
                                 val firstPose = result.landmarks().firstOrNull().orEmpty()
                                 val firstPoseWorld = result.worldLandmarks().firstOrNull().orEmpty()
-                                mUiState.value = mUiState.value.copy(
-                                    mLandmarks = firstPose,
-                                    mWorldLandmarks = firstPoseWorld,
-                                    mErrorMessage = null,
-                                )
+                                val currentUiState = mUiState.value
+                                val selectedExercise = currentUiState.mSelectedExercise
+                                val feedback = when (selectedExercise) {
+                                    ExerciseType.SQUAT -> mSquatFormFeedbackEngine.process(firstPose, firstPoseWorld)
+                                    ExerciseType.PLANK -> mPlankFormFeedbackEngine.process(
+                                        normalizedLandmarks = firstPose,
+                                        worldLandmarks = firstPoseWorld,
+                                        frameTimestampMs = SystemClock.elapsedRealtime(),
+                                    )
+                                    ExerciseType.PULLUP -> mPullUpFormFeedbackEngine.process(
+                                        normalizedLandmarks = firstPose,
+                                        barCalibration = currentUiState.toPullUpBarCalibration(),
+                                    )
+                                }
+                                mUiState.update {
+                                    it.copy(
+                                        mLandmarks = firstPose,
+                                        mWorldLandmarks = firstPoseWorld,
+                                        mErrorMessage = null,
+                                        mFormFeedback = feedback,
+                                    )
+                                }
                             }
                         },
                         mErrorListener = { message ->
-                            mUiState.value = mUiState.value.copy(
-                                mErrorMessage = message,
-                                mIsStartupCameraLoading = false,
-                            )
+                            mUiState.update {
+                                it.copy(
+                                    mErrorMessage = message,
+                                    mIsStartupCameraLoading = false,
+                                )
+                            }
                         },
                     ).also { it.setup() }
                 }
@@ -120,10 +156,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 mPoseLandmarkerHelper = helper
                 mAcceptFrames = true
             } catch (exception: Exception) {
-                mUiState.value = mUiState.value.copy(
-                    mErrorMessage = exception.message ?: "Failed to initialize pose detector",
-                    mIsStartupCameraLoading = false,
-                )
+                mUiState.update {
+                    it.copy(
+                        mErrorMessage = exception.message ?: "Failed to initialize pose detector",
+                        mIsStartupCameraLoading = false,
+                    )
+                }
                 mAcceptFrames = false
             } finally {
                 mIsPoseLandmarkerInitializing = false
@@ -151,7 +189,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         if (mUiState.value.mIsStartupCameraLoading) {
-            mUiState.value = mUiState.value.copy(mIsStartupCameraLoading = false)
+            mUiState.update { it.copy(mIsStartupCameraLoading = false) }
         }
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
@@ -161,7 +199,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
         val currentState = mUiState.value
         if (currentState.mFrameWidth != frameWidth || currentState.mFrameHeight != frameHeight) {
-            mUiState.value = currentState.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight)
+            mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
         }
 
         // Analyzer already runs on a background executor, so avoid hopping back to Main.
@@ -189,13 +227,86 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mWorldLandmarks = emptyList(),
             mFrameWidth = 0,
             mFrameHeight = 0,
+            mFormFeedback = FormFeedback(),
         )
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
     }
 
     fun setFrontCamera(isFrontCamera: Boolean) {
         val currentState = mUiState.value
         if (currentState.mIsFrontCamera == isFrontCamera) return
-        mUiState.value = currentState.copy(mIsFrontCamera = isFrontCamera)
+        mUiState.update { it.copy(mIsFrontCamera = isFrontCamera) }
+    }
+
+    fun toggleExerciseMode() {
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
+        mUiState.update { currentState ->
+            currentState.copy(
+                mSelectedExercise = when (currentState.mSelectedExercise) {
+                    ExerciseType.SQUAT -> ExerciseType.PLANK
+                    ExerciseType.PLANK -> ExerciseType.PULLUP
+                    ExerciseType.PULLUP -> ExerciseType.SQUAT
+                },
+                mFormFeedback = FormFeedback(),
+            )
+        }
+    }
+
+    fun setPullUpBarPoint(normalizedX: Float, normalizedY: Float) {
+        mUiState.update { currentState ->
+            when {
+                currentState.mPullUpBarLeftX == null || currentState.mPullUpBarLeftY == null -> {
+                    currentState.copy(
+                        mPullUpBarLeftX = normalizedX,
+                        mPullUpBarLeftY = normalizedY,
+                        mPullUpBarRightX = null,
+                        mPullUpBarRightY = null,
+                    )
+                }
+                currentState.mPullUpBarRightX == null || currentState.mPullUpBarRightY == null -> {
+                    val leftX = currentState.mPullUpBarLeftX ?: normalizedX
+                    val leftY = currentState.mPullUpBarLeftY ?: normalizedY
+                    if (normalizedX < leftX) {
+                        currentState.copy(
+                            mPullUpBarLeftX = normalizedX,
+                            mPullUpBarLeftY = normalizedY,
+                            mPullUpBarRightX = leftX,
+                            mPullUpBarRightY = leftY,
+                        )
+                    } else {
+                        currentState.copy(
+                            mPullUpBarRightX = normalizedX,
+                            mPullUpBarRightY = normalizedY,
+                        )
+                    }
+                }
+                else -> {
+                    currentState.copy(
+                        mPullUpBarLeftX = normalizedX,
+                        mPullUpBarLeftY = normalizedY,
+                        mPullUpBarRightX = null,
+                        mPullUpBarRightY = null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearPullUpBarCalibration() {
+        mPullUpFormFeedbackEngine.reset()
+        mUiState.update {
+            it.copy(
+                mPullUpBarLeftX = null,
+                mPullUpBarLeftY = null,
+                mPullUpBarRightX = null,
+                mPullUpBarRightY = null,
+                mFormFeedback = FormFeedback(),
+            )
+        }
     }
 
     override fun onCleared() {
@@ -204,10 +315,30 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mPendingLensSwitchToken = null
         mPoseLandmarkerHelper?.clear()
         mPoseLandmarkerHelper = null
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
         super.onCleared()
     }
 
     companion object {
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
+    }
+}
+
+private fun CameraUiState.toPullUpBarCalibration(): PullUpBarCalibration? {
+    val leftX = mPullUpBarLeftX
+    val leftY = mPullUpBarLeftY
+    val rightX = mPullUpBarRightX
+    val rightY = mPullUpBarRightY
+    return if (leftX != null && leftY != null && rightX != null && rightY != null) {
+        PullUpBarCalibration(
+            mLeftX = leftX,
+            mLeftY = leftY,
+            mRightX = rightX,
+            mRightY = rightY,
+        )
+    } else {
+        null
     }
 }
