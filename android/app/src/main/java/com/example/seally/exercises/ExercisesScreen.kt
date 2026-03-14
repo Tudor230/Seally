@@ -1,6 +1,7 @@
 package com.example.seally.exercises
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +29,16 @@ fun ExercisesScreen(
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
 ) {
+    var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
+
+    if (showDumbbellPage) {
+        DumbbellWorkoutsScreen(
+            modifier = modifier,
+            onBackClick = { showDumbbellPage = false },
+        )
+        return
+    }
 
     if (showCalendar) {
         CalendarScreen(
@@ -45,11 +55,11 @@ fun ExercisesScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/skinny - no background.png")
+        .data("file:///android_asset/icons/lilseal.png")
         .build()
 
     val calendarIconRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/calendar_icon - no background.png")
+        .data("file:///android_asset/icons/sealcalendar.png")
         .build()
 
     val dumbbellIconRequest = ImageRequest.Builder(context)
@@ -87,14 +97,18 @@ fun ExercisesScreen(
             contentDescription = "Seal",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 40.dp, bottom = 150.dp)
-                .size(260.dp),
+                .align(Alignment.BottomCenter)
+                .offset(y = 10.dp)
+                .fillMaxHeight(0.92f)
+                .padding(horizontal = 12.dp)
         )
 
         // Two action buttons bottom-left / bottom-right of the seal, above the nav bar
         IconButton(
-            onClick = onLeftActionClick,
+            onClick = {
+                onLeftActionClick()
+                showDumbbellPage = true
+            },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 24.dp, bottom = 60.dp)
