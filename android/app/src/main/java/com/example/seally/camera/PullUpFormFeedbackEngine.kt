@@ -16,7 +16,11 @@ class PullUpFormFeedbackEngine {
     private var mPhase: PullUpPhase = PullUpPhase.DEAD_HANG
     private var mHasDetectedStartPosition: Boolean = false
     private var mHasReachedTopInCurrentRep: Boolean = false
+    private var mHasAttemptedRepInCurrentCycle: Boolean = false
+    private var mHasFailedHeightInCurrentRep: Boolean = false
     private var mHasStableHandsInCurrentRep: Boolean = true
+    private var mHasAnnouncedGetIntoPosition: Boolean = false
+    private var mLastMouthY: Float? = null
     private var mWristAnchor: WristAnchor? = null
     private var mPendingCue: String? = null
     private var mPendingCueJoints: List<String> = emptyList()
@@ -54,71 +58,109 @@ class PullUpFormFeedbackEngine {
             cy = frontLandmarks.mRightWrist.y(),
         )
         val averageElbowAngle = (leftElbowAngle + rightElbowAngle) / 2f
+        val shouldersY = (frontLandmarks.mLeftShoulder.y() + frontLandmarks.mRightShoulder.y()) / 2f
         val mouthY = (frontLandmarks.mMouthLeft.y() + frontLandmarks.mMouthRight.y()) / 2f
         val handsY = (frontLandmarks.mLeftWrist.y() + frontLandmarks.mRightWrist.y()) / 2f
         val isArmsExtended = averageElbowAngle >= DEAD_HANG_ELBOW_ANGLE_DEG
         val isMouthAboveHands = mouthY < (handsY - MOUTH_ABOVE_HANDS_MARGIN)
         val isMouthBelowHands = mouthY > (handsY + MOUTH_BELOW_HANDS_MARGIN)
         val isBottomPosition = isArmsExtended && isMouthBelowHands
+        val isStandingNormally = isStandingNormally(
+            shouldersY = shouldersY,
+            handsY = handsY,
+            mouthY = mouthY,
+            elbowAngle = averageElbowAngle,
+        )
+        val previousMouthY = mLastMouthY
+        val isMouthMovingDown = previousMouthY != null && mouthY > (previousMouthY + MOUTH_DIRECTION_DELTA)
+        mLastMouthY = mouthY
 
         var speechCue: String? = null
-        if (isBottomPosition && mWristAnchor == null) {
-            mWristAnchor = WristAnchor(
-                mLeftX = frontLandmarks.mLeftWrist.x(),
-                mLeftY = frontLandmarks.mLeftWrist.y(),
-                mRightX = frontLandmarks.mRightWrist.x(),
-                mRightY = frontLandmarks.mRightWrist.y(),
-            )
-        }
         val isHandsStable = isHandsStable(frontLandmarks)
         if (!isHandsStable) {
             mHasStableHandsInCurrentRep = false
         }
 
-        when (mPhase) {
-            PullUpPhase.DEAD_HANG -> {
-                if (isBottomPosition) {
+        if (!mHasDetectedStartPosition) {
+            mPhase = PullUpPhase.DEAD_HANG
+            if (isStandingNormally && !mHasAnnouncedGetIntoPosition) {
+                speechCue = GET_INTO_POSITION_CUE
+                mHasAnnouncedGetIntoPosition = true
+            }
+            if (isBottomPosition) {
+                mWristAnchor = WristAnchor(
+                    mLeftX = frontLandmarks.mLeftWrist.x(),
+                    mLeftY = frontLandmarks.mLeftWrist.y(),
+                    mRightX = frontLandmarks.mRightWrist.x(),
+                    mRightY = frontLandmarks.mRightWrist.y(),
+                )
+                mHasStableHandsInCurrentRep = true
+                if (isHandsStable) {
+                    mHasDetectedStartPosition = true
                     mHasReachedTopInCurrentRep = false
-                    mHasStableHandsInCurrentRep = true
-                    mWristAnchor = WristAnchor(
-                        mLeftX = frontLandmarks.mLeftWrist.x(),
-                        mLeftY = frontLandmarks.mLeftWrist.y(),
-                        mRightX = frontLandmarks.mRightWrist.x(),
-                        mRightY = frontLandmarks.mRightWrist.y(),
-                    )
-                    if (isHandsStable && !mHasDetectedStartPosition) {
-                        mHasDetectedStartPosition = true
-                        speechCue = PULL_UP_CUE
-                    }
-                } else if (mHasDetectedStartPosition && isHandsStable) {
-                    mPhase = PullUpPhase.PULLING
+                    mHasAttemptedRepInCurrentCycle = false
+                    mHasFailedHeightInCurrentRep = false
+                    speechCue = BEGIN_PULL_UP_CUE
                 }
             }
-            PullUpPhase.PULLING -> {
-                if (isMouthAboveHands) {
-                    mPhase = PullUpPhase.TOP
-                    if (!mHasReachedTopInCurrentRep) {
-                        mHasReachedTopInCurrentRep = true
-                        if (mHasStableHandsInCurrentRep) {
-                            mRepCount += 1
+        } else {
+            if (isStandingNormally && !isBottomPosition && mPhase == PullUpPhase.DEAD_HANG) {
+                mHasDetectedStartPosition = false
+                mHasReachedTopInCurrentRep = false
+                mHasAttemptedRepInCurrentCycle = false
+                mHasFailedHeightInCurrentRep = false
+                mHasStableHandsInCurrentRep = true
+                mWristAnchor = null
+                mHasAnnouncedGetIntoPosition = false
+            } else {
+                when (mPhase) {
+                    PullUpPhase.DEAD_HANG -> {
+                        if (isBottomPosition) {
+                            mWristAnchor = WristAnchor(
+                                mLeftX = frontLandmarks.mLeftWrist.x(),
+                                mLeftY = frontLandmarks.mLeftWrist.y(),
+                                mRightX = frontLandmarks.mRightWrist.x(),
+                                mRightY = frontLandmarks.mRightWrist.y(),
+                            )
+                            mHasStableHandsInCurrentRep = true
+                        } else {
+                            mPhase = PullUpPhase.PULLING
+                            mHasAttemptedRepInCurrentCycle = true
+                            mHasReachedTopInCurrentRep = false
+                            mHasFailedHeightInCurrentRep = false
                         }
-                        speechCue = REP_COMPLETE_CUE
                     }
-                } else if (isBottomPosition) {
-                    mPhase = PullUpPhase.DEAD_HANG
-                }
-            }
-            PullUpPhase.TOP -> {
-                if (!isMouthAboveHands) {
-                    mPhase = PullUpPhase.LOWERING
-                }
-            }
-            PullUpPhase.LOWERING -> {
-                if (isBottomPosition) {
-                    mPhase = PullUpPhase.DEAD_HANG
-                    mHasDetectedStartPosition = false
-                    mHasReachedTopInCurrentRep = false
-                    mHasStableHandsInCurrentRep = true
+                    PullUpPhase.PULLING -> {
+                        if (isMouthAboveHands) {
+                            mPhase = PullUpPhase.TOP
+                            if (!mHasReachedTopInCurrentRep) {
+                                mHasReachedTopInCurrentRep = true
+                                if (mHasStableHandsInCurrentRep) {
+                                    mRepCount += 1
+                                }
+                                speechCue = REP_COMPLETE_CUE
+                            }
+                        } else if (isMouthMovingDown) {
+                            mPhase = PullUpPhase.LOWERING
+                            mHasFailedHeightInCurrentRep = true
+                        } else if (isBottomPosition && mHasAttemptedRepInCurrentCycle && !mHasReachedTopInCurrentRep) {
+                            mPhase = PullUpPhase.DEAD_HANG
+                            mHasFailedHeightInCurrentRep = true
+                        }
+                    }
+                    PullUpPhase.TOP -> {
+                        if (!isMouthAboveHands) {
+                            mPhase = PullUpPhase.LOWERING
+                        }
+                    }
+                    PullUpPhase.LOWERING -> {
+                        if (isBottomPosition) {
+                            mPhase = PullUpPhase.DEAD_HANG
+                            mHasReachedTopInCurrentRep = false
+                            mHasAttemptedRepInCurrentCycle = false
+                            mHasStableHandsInCurrentRep = true
+                        }
+                    }
                 }
             }
         }
@@ -126,8 +168,14 @@ class PullUpFormFeedbackEngine {
         var frameCue: String? = null
         var frameJoints: List<String> = emptyList()
         if (!isHandsStable) {
-            frameCue = "Keep your hands fixed"
+            frameCue = "Keep hands steady"
             frameJoints = listOf("left wrist", "right wrist")
+        } else if (!mHasDetectedStartPosition) {
+            frameCue = if (isStandingNormally) "Get into position" else "Get into dead hang"
+            frameJoints = listOf("shoulders", "elbows", "wrists")
+        } else if (mHasFailedHeightInCurrentRep && (mPhase == PullUpPhase.LOWERING || mPhase == PullUpPhase.DEAD_HANG)) {
+            frameCue = "Not high enough"
+            frameJoints = listOf("mouth", "wrists")
         } else if ((mPhase == PullUpPhase.LOWERING || mPhase == PullUpPhase.DEAD_HANG) && !isArmsExtended && isMouthBelowHands) {
             frameCue = "Fully extend your arms"
             frameJoints = listOf("elbows", "wrists")
@@ -143,7 +191,7 @@ class PullUpFormFeedbackEngine {
             mSpeechCue = speechCue,
             mStatus = when {
                 isCorrecting -> ExerciseStatus.ERROR
-                mPhase == PullUpPhase.DEAD_HANG -> ExerciseStatus.READY
+                !mHasDetectedStartPosition || mPhase == PullUpPhase.DEAD_HANG -> ExerciseStatus.READY
                 else -> ExerciseStatus.ACTIVE
             },
             mRepCount = mRepCount,
@@ -158,7 +206,11 @@ class PullUpFormFeedbackEngine {
         mPhase = PullUpPhase.DEAD_HANG
         mHasDetectedStartPosition = false
         mHasReachedTopInCurrentRep = false
+        mHasAttemptedRepInCurrentCycle = false
+        mHasFailedHeightInCurrentRep = false
         mHasStableHandsInCurrentRep = true
+        mHasAnnouncedGetIntoPosition = false
+        mLastMouthY = null
         mWristAnchor = null
         mPendingCue = null
         mPendingCueJoints = emptyList()
@@ -166,6 +218,18 @@ class PullUpFormFeedbackEngine {
         mPersistedCue = null
         mPersistedCueJoints = emptyList()
         mClearFrames = 0
+    }
+
+    private fun isStandingNormally(
+        shouldersY: Float,
+        handsY: Float,
+        mouthY: Float,
+        elbowAngle: Float,
+    ): Boolean {
+        val wristsBelowShoulders = handsY > (shouldersY + STANDING_WRISTS_BELOW_SHOULDERS_MARGIN)
+        val mouthAboveHands = mouthY < (handsY - STANDING_MOUTH_ABOVE_HANDS_MARGIN)
+        val armsRelaxed = elbowAngle >= STANDING_ELBOW_MIN_ANGLE_DEG
+        return wristsBelowShoulders && mouthAboveHands && armsRelaxed
     }
 
     private fun stabilizeCue(cue: String?, joints: List<String>) {
@@ -263,11 +327,16 @@ class PullUpFormFeedbackEngine {
         private const val DEAD_HANG_ELBOW_ANGLE_DEG = 155f
         private const val MOUTH_ABOVE_HANDS_MARGIN = 0.015f
         private const val MOUTH_BELOW_HANDS_MARGIN = 0.01f
-        private const val WRIST_STABILITY_TOLERANCE = 0.06f
+        private const val MOUTH_DIRECTION_DELTA = 0.004f
+        private const val STANDING_WRISTS_BELOW_SHOULDERS_MARGIN = 0.06f
+        private const val STANDING_MOUTH_ABOVE_HANDS_MARGIN = 0.03f
+        private const val STANDING_ELBOW_MIN_ANGLE_DEG = 135f
+        private const val WRIST_STABILITY_TOLERANCE = 0.09f
         private const val PERSISTENCE_FRAMES = 8
         private const val CLEARANCE_FRAMES = 8
-        private const val PULL_UP_CUE = "Pull up"
-        private const val REP_COMPLETE_CUE = "Pull-up complete"
+        private const val GET_INTO_POSITION_CUE = "Get into position"
+        private const val BEGIN_PULL_UP_CUE = "Begin pull-up"
+        private const val REP_COMPLETE_CUE = "Rep complete"
     }
 }
 

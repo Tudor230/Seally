@@ -264,6 +264,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update { it.copy(mIsFrontCamera = isFrontCamera) }
     }
 
+    fun setSelectedExercise(mExerciseType: ExerciseType) {
+        val currentState = mUiState.value
+        if (currentState.mSelectedExercise == mExerciseType) return
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
+        mUiState.update {
+            it.copy(
+                mSelectedExercise = mExerciseType,
+                mFormFeedback = FormFeedback(),
+            )
+        }
+    }
+
     fun toggleExerciseMode() {
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()

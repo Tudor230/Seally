@@ -11,7 +11,7 @@ class PullupGuideActivity : ComponentActivity() {
         setContent {
             SeallyTheme {
                 ExerciseGuideScreen(
-                    mTitle = "Pullup",
+                    mTitle = "Pull-up",
                     mImageAssetPath = "img/pullup.png",
                     mOnConfirm = { finish() },
                 )

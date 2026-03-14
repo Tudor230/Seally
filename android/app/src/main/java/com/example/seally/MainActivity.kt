@@ -164,6 +164,7 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                 )
                 AppDestinations.EXERCISES -> ExercisesScreen(
                     modifier = Modifier.padding(innerPadding),
+                    mCameraViewModel = mCameraViewModel,
                 )
             }
         }
