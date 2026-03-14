@@ -2,11 +2,14 @@ package com.example.seally.camera
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.seally.livekit.LandmarkPacketEncoder
+import com.example.seally.livekit.LiveKitPublisher
 import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import kotlinx.coroutines.Dispatchers
@@ -29,14 +32,14 @@ data class CameraUiState(
     val mFrameWidth: Int = 0,
     val mFrameHeight: Int = 0,
     val mSelectedExercise: ExerciseType = ExerciseType.SQUAT,
-    val mPullUpBarLeftX: Float? = null,
-    val mPullUpBarLeftY: Float? = null,
-    val mPullUpBarRightX: Float? = null,
-    val mPullUpBarRightY: Float? = null,
     val mFormFeedback: FormFeedback = FormFeedback(),
+    val mLiveKitStatus: String = "LiveKit idle",
+    val mRoomCode: String = "",
+    val mIsLiveKitConnected: Boolean = false,
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
+    private val mTag = "CameraViewModel"
     private val mUiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = mUiState.asStateFlow()
 
@@ -52,6 +55,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mCurrentLensSwitchToken: Int = 0
     private var mPendingLensSwitchToken: Int? = null
     private var mHasAttemptedWarmup: Boolean = false
+    private val mLiveKitPublisher = LiveKitPublisher(getApplication())
+    private var mIsLiveKitConnecting: Boolean = false
+    private var mLandmarkSequence: Long = 0L
+    private var mLastLandmarkSentAtMs: Long = 0L
+    private var mFrameCounter: Long = 0L
+    private val mLiveKitUrl: String by lazy { readConfigString("livekit_url").trim() }
+    private val mLiveKitApiKey: String by lazy { readConfigString("livekit_api_key").trim() }
+    private val mLiveKitApiSecret: String by lazy { readConfigString("livekit_api_secret").trim() }
+    private val mLiveKitLandmarkTopic: String by lazy {
+        readConfigString("livekit_landmark_topic").trim().ifBlank {
+            DEFAULT_LANDMARK_TOPIC
+        }
+    }
 
     fun setCameraPermission(hasPermission: Boolean, isInitialCheck: Boolean) {
         val currentState = mUiState.value
@@ -75,10 +91,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mPoseLandmarkerHelper?.clear()
             mPoseLandmarkerHelper = null
             mIsPoseLandmarkerInitializing = false
+            disconnectLiveKit()
             mSquatFormFeedbackEngine.reset()
             mPlankFormFeedbackEngine.reset()
             mPullUpFormFeedbackEngine.reset()
             mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (no camera permission)") }
             return
         }
 
@@ -88,6 +106,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         mAcceptFrames = !mIsPoseLandmarkerInitializing
+    }
+
+    fun setRoomCode(roomCode: String) {
+        mUiState.update { it.copy(mRoomCode = roomCode.trim().uppercase()) }
+    }
+
+    fun connectToLiveKit() {
+        val roomCode = mUiState.value.mRoomCode
+        if (roomCode.isBlank()) {
+            mUiState.update { it.copy(mLiveKitStatus = "Enter a room code first") }
+            return
+        }
+        ensureLiveKitConnected(roomCode)
+    }
+
+    fun disconnectFromLiveKit() {
+        disconnectLiveKit()
+        mUiState.update {
+            it.copy(
+                mIsLiveKitConnected = false,
+                mLiveKitStatus = "Disconnected",
+            )
+        }
     }
 
     fun preWarmPoseLandmarker() {
@@ -129,17 +170,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                                     )
                                     ExerciseType.PULLUP -> mPullUpFormFeedbackEngine.process(
                                         normalizedLandmarks = firstPose,
-                                        barCalibration = currentUiState.toPullUpBarCalibration(),
                                     )
                                 }
                                 mUiState.update {
                                     it.copy(
                                         mLandmarks = firstPose,
                                         mWorldLandmarks = firstPoseWorld,
-                                        mErrorMessage = null,
                                         mFormFeedback = feedback,
                                     )
                                 }
+                                maybePublishLandmarks(firstPose)
                             }
                         },
                         mErrorListener = { message ->
@@ -202,8 +242,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
         }
 
-        // Analyzer already runs on a background executor, so avoid hopping back to Main.
-        mPoseLandmarkerHelper?.detectLiveStreamFrame(imageProxy) ?: imageProxy.close()
+        runCatching {
+            mPoseLandmarkerHelper?.detectLiveStreamFrame(imageProxy)
+        }.onFailure { error ->
+            Log.e(mTag, "Pose processing failed", error)
+        }
+        imageProxy.close()
+        mFrameCounter += 1L
+        if (mFrameCounter % LIVEKIT_STATUS_UPDATE_EVERY_FRAMES == 0L) {
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}") }
+        }
     }
 
     fun onLensSwitchStarted() {
@@ -240,6 +288,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update { it.copy(mIsFrontCamera = isFrontCamera) }
     }
 
+    fun setSelectedExercise(mExerciseType: ExerciseType) {
+        val currentState = mUiState.value
+        if (currentState.mSelectedExercise == mExerciseType) return
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
+        mUiState.update {
+            it.copy(
+                mSelectedExercise = mExerciseType,
+                mFormFeedback = FormFeedback(),
+            )
+        }
+    }
+
     fun toggleExerciseMode() {
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
@@ -256,57 +318,89 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setPullUpBarPoint(normalizedX: Float, normalizedY: Float) {
-        mUiState.update { currentState ->
-            when {
-                currentState.mPullUpBarLeftX == null || currentState.mPullUpBarLeftY == null -> {
-                    currentState.copy(
-                        mPullUpBarLeftX = normalizedX,
-                        mPullUpBarLeftY = normalizedY,
-                        mPullUpBarRightX = null,
-                        mPullUpBarRightY = null,
-                    )
-                }
-                currentState.mPullUpBarRightX == null || currentState.mPullUpBarRightY == null -> {
-                    val leftX = currentState.mPullUpBarLeftX ?: normalizedX
-                    val leftY = currentState.mPullUpBarLeftY ?: normalizedY
-                    if (normalizedX < leftX) {
-                        currentState.copy(
-                            mPullUpBarLeftX = normalizedX,
-                            mPullUpBarLeftY = normalizedY,
-                            mPullUpBarRightX = leftX,
-                            mPullUpBarRightY = leftY,
+    private fun ensureLiveKitConnected(roomCode: String) {
+        if (mLiveKitUrl.isBlank() || mLiveKitApiKey.isBlank() || mLiveKitApiSecret.isBlank()) {
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (config missing)") }
+            return
+        }
+
+        if (mIsLiveKitConnecting) return
+        mIsLiveKitConnecting = true
+        mUiState.update { it.copy(mLiveKitStatus = "LiveKit connecting...") }
+        viewModelScope.launch {
+            try {
+                val token = com.example.seally.livekit.LiveKitTokenGenerator.generatePublisherToken(
+                    roomCode = roomCode,
+                    apiKey = mLiveKitApiKey,
+                    apiSecret = mLiveKitApiSecret,
+                )
+                mLiveKitPublisher.connect(
+                    url = mLiveKitUrl,
+                    token = token,
+                ).onFailure { error ->
+                    Log.e(mTag, "LiveKit connection failed", error)
+                    mUiState.update {
+                        it.copy(
+                            mLiveKitStatus = "LiveKit failed: ${error.message ?: "unknown error"}",
+                            mIsLiveKitConnected = false,
                         )
-                    } else {
-                        currentState.copy(
-                            mPullUpBarRightX = normalizedX,
-                            mPullUpBarRightY = normalizedY,
+                    }
+                }.onSuccess {
+                    mUiState.update {
+                        it.copy(
+                            mIsLiveKitConnected = true,
+                            mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}",
                         )
                     }
                 }
-                else -> {
-                    currentState.copy(
-                        mPullUpBarLeftX = normalizedX,
-                        mPullUpBarLeftY = normalizedY,
-                        mPullUpBarRightX = null,
-                        mPullUpBarRightY = null,
-                    )
+            } finally {
+                mIsLiveKitConnecting = false
+            }
+        }
+    }
+
+    private fun disconnectLiveKit() {
+        mLandmarkSequence = 0L
+        mLastLandmarkSentAtMs = 0L
+        mFrameCounter = 0L
+        mLiveKitPublisher.disconnect()
+    }
+
+    private fun maybePublishLandmarks(landmarks: List<NormalizedLandmark>) {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - mLastLandmarkSentAtMs < LANDMARK_SEND_MIN_INTERVAL_MS) return
+
+        val state = mUiState.value
+        val payload = LandmarkPacketEncoder.encode(
+            sequence = mLandmarkSequence,
+            timestampMs = nowMs,
+            frameWidth = state.mFrameWidth,
+            frameHeight = state.mFrameHeight,
+            isFrontCamera = state.mIsFrontCamera,
+            landmarks = landmarks,
+        )
+        mLandmarkSequence += 1L
+
+        if (payload.size > MAX_LIVEKIT_DATA_PACKET_BYTES) return
+        mLastLandmarkSentAtMs = nowMs
+
+        viewModelScope.launch {
+            mLiveKitPublisher.publishLandmarks(
+                payload = payload,
+                topic = mLiveKitLandmarkTopic,
+            ).onFailure {
+                mUiState.update { state ->
+                    state.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}")
                 }
             }
         }
     }
 
-    fun clearPullUpBarCalibration() {
-        mPullUpFormFeedbackEngine.reset()
-        mUiState.update {
-            it.copy(
-                mPullUpBarLeftX = null,
-                mPullUpBarLeftY = null,
-                mPullUpBarRightX = null,
-                mPullUpBarRightY = null,
-                mFormFeedback = FormFeedback(),
-            )
-        }
+    private fun readConfigString(resourceName: String): String {
+        val application = getApplication<Application>()
+        val resourceId = application.resources.getIdentifier(resourceName, "string", application.packageName)
+        if (resourceId == 0) return ""
+        return application.getString(resourceId)
     }
 
     override fun onCleared() {
@@ -315,6 +409,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mPendingLensSwitchToken = null
         mPoseLandmarkerHelper?.clear()
         mPoseLandmarkerHelper = null
+        disconnectLiveKit()
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
@@ -323,22 +418,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
-    }
-}
-
-private fun CameraUiState.toPullUpBarCalibration(): PullUpBarCalibration? {
-    val leftX = mPullUpBarLeftX
-    val leftY = mPullUpBarLeftY
-    val rightX = mPullUpBarRightX
-    val rightY = mPullUpBarRightY
-    return if (leftX != null && leftY != null && rightX != null && rightY != null) {
-        PullUpBarCalibration(
-            mLeftX = leftX,
-            mLeftY = leftY,
-            mRightX = rightX,
-            mRightY = rightY,
-        )
-    } else {
-        null
+        private const val LANDMARK_SEND_MIN_INTERVAL_MS = 33L
+        private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
+        private const val DEFAULT_LANDMARK_TOPIC = "pose.binary.v2"
+        private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
     }
 }

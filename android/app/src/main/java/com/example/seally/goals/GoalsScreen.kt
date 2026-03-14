@@ -1,5 +1,7 @@
 package com.example.seally.goals
 
+import android.app.Application
+import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,8 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,6 +57,27 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.max
 
@@ -162,11 +185,8 @@ private data class GoalUiModel(
 fun GoalsScreen(
     modifier: Modifier = Modifier,
 ) {
-    val mGoals = remember {
-        mutableStateListOf<GoalUiModel>().apply {
-            addAll(buildDefaultGoals())
-        }
-    }
+    val mViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
+    val mGoals by mViewModel.mGoals.collectAsState()
     var mShowAddGoalDialog by remember { mutableStateOf(false) }
     var mSelectedGoal by remember { mutableStateOf<GoalUiModel?>(null) }
 
@@ -255,17 +275,10 @@ fun GoalsScreen(
             availableMetrics = mAvailableMetrics,
             onDismiss = { mShowAddGoalDialog = false },
             onGoalAdded = { mMetric, mCurrent, mTarget ->
-                val mNextId = (mGoals.maxOfOrNull { it.mId } ?: 0L) + 1L
-                val mProgress = mMetric.calculateProgress(mCurrent, mTarget)
-                mGoals.add(
-                    GoalUiModel(
-                        mId = mNextId,
-                        mMetric = mMetric,
-                        mCurrentValue = mCurrent,
-                        mTargetValue = mTarget,
-                        mHistoryValues = buildTrendValues(mProgress),
-                        mChartLabels = mMetric.mDefaultLabels,
-                    ),
+                mViewModel.addGoal(
+                    mMetric = mMetric,
+                    mCurrent = mCurrent,
+                    mTarget = mTarget,
                 )
                 mShowAddGoalDialog = false
             },
@@ -277,7 +290,7 @@ fun GoalsScreen(
             goal = mGoal,
             onDismiss = { mSelectedGoal = null },
             onDelete = {
-                mGoals.removeAll { it.mId == mGoal.mId }
+                mViewModel.deleteGoal(mGoal.mId)
                 mSelectedGoal = null
             },
         )
@@ -851,5 +864,203 @@ private fun Float?.toInputValue(): String {
         mValue.toInt().toString()
     } else {
         String.format(Locale.US, "%.1f", mValue)
+    }
+}
+
+@Entity(tableName = "goals")
+data class GoalEntity(
+    @PrimaryKey
+    val mId: Long,
+    val mMetricKey: String,
+    val mCurrentValue: Float,
+    val mTargetValue: Float,
+    val mHistoryValues: String,
+    val mChartLabels: String,
+)
+
+@Dao
+interface GoalDao {
+    @Query("SELECT * FROM goals ORDER BY mId ASC")
+    fun observeAll(): Flow<List<GoalEntity>>
+
+    // Keep existing one-shot query if you still need it elsewhere
+    @Query("SELECT * FROM goals ORDER BY mId ASC")
+    suspend fun getAll(): List<GoalEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(goal: GoalEntity)
+
+    @Query("DELETE FROM goals WHERE mId = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM goals")
+    suspend fun deleteAll()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(goals: List<GoalEntity>)
+}
+
+@Database(
+    entities = [GoalEntity::class],
+    version = 1,
+    exportSchema = false,
+)
+abstract class GoalsDatabase : RoomDatabase() {
+    abstract fun goalDao(): GoalDao
+
+    companion object {
+        @Volatile
+        private var mInstance: GoalsDatabase? = null
+
+        fun getInstance(context: Context): GoalsDatabase {
+            return mInstance ?: synchronized(this) {
+                mInstance ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    GoalsDatabase::class.java,
+                    "seally_goals.db",
+                ).build().also { mInstance = it }
+            }
+        }
+    }
+}
+
+private class GoalsRepository(
+    private val mGoalDao: GoalDao,
+) {
+    suspend fun getGoals(): List<GoalUiModel> {
+        return mGoalDao.getAll().mapNotNull { mEntity ->
+            val mMetric = GoalMetric.entries.firstOrNull { it.name == mEntity.mMetricKey }
+                ?: return@mapNotNull null
+            GoalUiModel(
+                mId = mEntity.mId,
+                mMetric = mMetric,
+                mCurrentValue = mEntity.mCurrentValue,
+                mTargetValue = mEntity.mTargetValue,
+                mHistoryValues = decodeFloatList(mEntity.mHistoryValues),
+                mChartLabels = decodeStringList(mEntity.mChartLabels),
+            )
+        }
+    }
+
+    fun observeGoals(): Flow<List<GoalUiModel>> {
+        return mGoalDao.observeAll().map { entities ->
+            entities.mapNotNull { mEntity ->
+                val mMetric = GoalMetric.entries.firstOrNull { it.name == mEntity.mMetricKey }
+                    ?: return@mapNotNull null
+                GoalUiModel(
+                    mId = mEntity.mId,
+                    mMetric = mMetric,
+                    mCurrentValue = mEntity.mCurrentValue,
+                    mTargetValue = mEntity.mTargetValue,
+                    mHistoryValues = decodeFloatList(mEntity.mHistoryValues),
+                    mChartLabels = decodeStringList(mEntity.mChartLabels),
+                )
+            }
+        }
+    }
+
+    suspend fun upsertGoal(goal: GoalUiModel) {
+        mGoalDao.upsert(goal.toEntity())
+    }
+
+    suspend fun deleteGoal(id: Long) {
+        mGoalDao.deleteById(id)
+    }
+
+    suspend fun replaceAllGoals(goals: List<GoalUiModel>) {
+        mGoalDao.deleteAll()
+        mGoalDao.insertAll(goals.map { it.toEntity() })
+    }
+
+    private fun GoalUiModel.toEntity(): GoalEntity {
+        return GoalEntity(
+            mId = mId,
+            mMetricKey = mMetric.name,
+            mCurrentValue = mCurrentValue,
+            mTargetValue = mTargetValue,
+            mHistoryValues = encodeFloatList(mHistoryValues),
+            mChartLabels = encodeStringList(mChartLabels),
+        )
+    }
+
+    private fun encodeFloatList(values: List<Float>): String = values.joinToString(",")
+
+    private fun decodeFloatList(encoded: String): List<Float> {
+        if (encoded.isBlank()) return emptyList()
+        return encoded.split(",").mapNotNull { it.toFloatOrNull() }
+    }
+
+    private fun encodeStringList(values: List<String>): String = values.joinToString("|")
+
+    private fun decodeStringList(encoded: String): List<String> {
+        if (encoded.isBlank()) return emptyList()
+        return encoded.split("|")
+    }
+}
+
+private class GoalsViewModel(
+    application: Application,
+) : AndroidViewModel(application) {
+    private val mRepository = GoalsRepository(
+        mGoalDao = GoalsDatabase.getInstance(application).goalDao(),
+    )
+
+    private val mGoalsState = MutableStateFlow<List<GoalUiModel>>(emptyList())
+    val mGoals: StateFlow<List<GoalUiModel>> = mGoalsState.asStateFlow()
+
+    init {
+        // 1) Ensure defaults exist
+        viewModelScope.launch(Dispatchers.IO) {
+            val mStoredGoals = mRepository.getGoals()
+            if (mStoredGoals.isEmpty()) {
+                mRepository.replaceAllGoals(buildDefaultGoals())
+            }
+        }
+
+        // 2) Always observe the DB so UI refreshes instantly on any change
+        viewModelScope.launch {
+            mRepository.observeGoals().collect { mGoalsFromDb ->
+                mGoalsState.value = mGoalsFromDb
+            }
+        }
+    }
+
+    fun addGoal(
+        mMetric: GoalMetric,
+        mCurrent: Float,
+        mTarget: Float,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val mCurrentGoals = mGoalsState.value
+            val mNextId = (mCurrentGoals.maxOfOrNull { it.mId } ?: 0L) + 1L
+            val mProgress = mMetric.calculateProgress(mCurrent, mTarget)
+            val mNewGoal = GoalUiModel(
+                mId = mNextId,
+                mMetric = mMetric,
+                mCurrentValue = mCurrent,
+                mTargetValue = mTarget,
+                mHistoryValues = buildTrendValues(mProgress),
+                mChartLabels = mMetric.mDefaultLabels,
+            )
+            mRepository.upsertGoal(mNewGoal)
+            // No manual mGoalsState update here; DB Flow will emit and refresh UI instantly.
+        }
+    }
+
+    fun deleteGoal(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            mRepository.deleteGoal(id)
+            // No manual mGoalsState update here; DB Flow will emit and refresh UI instantly.
+        }
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: androidx.lifecycle.viewmodel.CreationExtras): T {
+                val mApplication = checkNotNull(extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY])
+                return GoalsViewModel(mApplication) as T
+            }
+        }
     }
 }

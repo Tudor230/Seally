@@ -1,11 +1,16 @@
 package com.example.seally.exercises
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,14 +26,57 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
+import com.example.seally.camera.CameraScreen
+import com.example.seally.camera.CameraViewModel
+import com.example.seally.camera.ExerciseType
 
 @Composable
 fun ExercisesScreen(
     modifier: Modifier = Modifier,
+    mCameraViewModel: CameraViewModel,
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
 ) {
+    var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
+    var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+
+    if (mSelectedExerciseForChecker != null) {
+        Box(modifier = modifier.fillMaxSize()) {
+            CameraScreen(
+                modifier = Modifier.fillMaxSize(),
+                mViewModel = mCameraViewModel,
+                mShowExerciseGuideOnEntry = true,
+            )
+            IconButton(
+                onClick = { mSelectedExerciseForChecker = null },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 12.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Form checker",
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 20.dp),
+            )
+        }
+        return
+    }
+
+    if (showDumbbellPage) {
+        DumbbellWorkoutsScreen(
+            modifier = modifier,
+            onBackClick = { showDumbbellPage = false },
+            onExerciseSelected = { mExercise ->
+                mCameraViewModel.setSelectedExercise(mExercise)
+                mSelectedExerciseForChecker = mExercise
+            },
+        )
+        return
+    }
 
     if (showCalendar) {
         CalendarScreen(
@@ -45,11 +93,11 @@ fun ExercisesScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/skinny - no background.png")
+        .data("file:///android_asset/icons/muscles.png")
         .build()
 
     val calendarIconRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/calendar_icon - no background.png")
+        .data("file:///android_asset/icons/sealcalendar.png")
         .build()
 
     val dumbbellIconRequest = ImageRequest.Builder(context)
@@ -57,7 +105,7 @@ fun ExercisesScreen(
         .build()
 
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/background_exercises.png")
+        .data("file:///android_asset/icons/gyim.jpeg")
         .build()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -87,14 +135,18 @@ fun ExercisesScreen(
             contentDescription = "Seal",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 40.dp, bottom = 150.dp)
-                .size(260.dp),
+                .align(Alignment.BottomCenter)
+               // .offset(y = 0.dp)
+                .fillMaxHeight(0.88f)
+                .padding(horizontal = 12.dp)
         )
 
         // Two action buttons bottom-left / bottom-right of the seal, above the nav bar
         IconButton(
-            onClick = onLeftActionClick,
+            onClick = {
+                onLeftActionClick()
+                showDumbbellPage = true
+            },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 24.dp, bottom = 60.dp)
