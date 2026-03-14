@@ -5,16 +5,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,13 +44,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -53,7 +63,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
@@ -65,6 +79,30 @@ data class NutritionLabelScanResult(
     val carbs: Int,
     val fats: Int,
     val recognizedText: String,
+)
+
+private const val NUTRITION_SCANNER_LOG_TAG = "NutritionScanner"
+
+private enum class LiveDetectionType {
+    Barcode,
+    NutritionLabel,
+}
+
+private data class NormalizedBoundingBox(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
+
+private data class LiveDetectionResult(
+    val type: LiveDetectionType,
+    val bounds: NormalizedBoundingBox,
+)
+
+private data class BarcodeCaptureResult(
+    val allValues: List<String>,
+    val selectedValue: String?,
 )
 
 @Composable
@@ -80,14 +118,25 @@ fun NutritionLabelScannerPage(
 
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mImageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var mLiveDetection by remember { mutableStateOf<LiveDetectionResult?>(null) }
     var mHasCompletedInitialPermissionCheck by remember { mutableStateOf(false) }
     var mHasCameraPermission by remember { mutableStateOf(false) }
     var mIsScanning by remember { mutableStateOf(false) }
     var mStatusMessage by remember { mutableStateOf<String?>(null) }
+    val mIsBarcodeReady = true
     val mIsOcrReady = true
 
+    val mBarcodeEngine = remember(mContext) {
+        OnDeviceBarcodeScannerEngine()
+    }
+    val mLiveDetectionEngine = remember(mContext) {
+        OnDeviceLiveDetectionEngine()
+    }
     val mOcrEngine = remember(mContext) {
         OnDeviceNutritionOcrEngine()
+    }
+    val mOpenFoodFactsClient = remember(mContext) {
+        OpenFoodFactsApiClient()
     }
 
     fun hasCameraPermission(): Boolean {
@@ -121,7 +170,7 @@ fun NutritionLabelScannerPage(
         onDispose { mLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(mPreviewView, mHasCameraPermission, mLifecycleOwner) {
+    LaunchedEffect(mPreviewView, mHasCameraPermission, mLifecycleOwner, mLiveDetectionEngine) {
         val previewView = mPreviewView ?: return@LaunchedEffect
         if (!mHasCameraPermission) return@LaunchedEffect
 
@@ -133,6 +182,16 @@ fun NutritionLabelScannerPage(
                     surfaceProvider = previewView.surfaceProvider
                 }
                 val imageCapture = ImageCapture.Builder().build()
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .apply {
+                        setAnalyzer(mMainExecutor) { imageProxy ->
+                            mLiveDetectionEngine.analyze(imageProxy) { detectionResult ->
+                                mLiveDetection = detectionResult
+                            }
+                        }
+                    }
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                 cameraProvider.unbindAll()
@@ -141,6 +200,7 @@ fun NutritionLabelScannerPage(
                     cameraSelector,
                     preview,
                     imageCapture,
+                    imageAnalysis,
                 )
                 mImageCapture = imageCapture
             },
@@ -151,6 +211,8 @@ fun NutritionLabelScannerPage(
     DisposableEffect(Unit) {
         onDispose {
             runCatching { ProcessCameraProvider.getInstance(mContext).get().unbindAll() }
+            mBarcodeEngine.release()
+            mLiveDetectionEngine.release()
             mOcrEngine.release()
         }
     }
@@ -189,6 +251,13 @@ fun NutritionLabelScannerPage(
             update = { previewView -> mPreviewView = previewView },
         )
 
+        mLiveDetection?.let { detectionResult ->
+            LiveDetectionOverlay(
+                detection = detectionResult,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
         IconButton(
             onClick = onBack,
             modifier = Modifier
@@ -210,11 +279,15 @@ fun NutritionLabelScannerPage(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Button(
-                enabled = mIsOcrReady && !mIsScanning,
+                enabled = mIsBarcodeReady && mIsOcrReady && !mIsScanning,
                 onClick = {
                     val imageCapture = mImageCapture
                     if (imageCapture == null) {
                         mStatusMessage = "Camera is not ready yet."
+                        return@Button
+                    }
+                    if (!mIsBarcodeReady) {
+                        mStatusMessage = "Barcode scanner is not ready."
                         return@Button
                     }
                     if (!mIsOcrReady) {
@@ -223,7 +296,7 @@ fun NutritionLabelScannerPage(
                     }
 
                     mIsScanning = true
-                    mStatusMessage = "Capturing nutrition label..."
+                    mStatusMessage = "Capturing image..."
                     val photoFile = File.createTempFile("nutrition_scan_", ".jpg", mContext.cacheDir)
                     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
                     imageCapture.takePicture(
@@ -243,24 +316,75 @@ fun NutritionLabelScannerPage(
                                         return@launch
                                     }
 
-                                    mStatusMessage = "Reading nutrition label..."
-                                    val ocrResult = withContext(Dispatchers.Default) {
-                                        mOcrEngine.detectText(bitmap)
+                                    var mShouldRunOcrFallback = true
+                                    mStatusMessage = "Scanning barcode..."
+                                    val barcodeResult = withContext(Dispatchers.Default) {
+                                        mBarcodeEngine.detectBarcode(bitmap)
                                     }
-                                    ocrResult.fold(
-                                        onSuccess = { detectedText ->
-                                            val parsedResult = NutritionLabelParser.parse(detectedText)
-                                            if (parsedResult == null) {
-                                                mStatusMessage = "No readable nutrition values found."
-                                            } else {
-                                                mStatusMessage = null
-                                                onScanResult(parsedResult)
+                                    barcodeResult.fold(
+                                        onSuccess = { barcodeScanResult ->
+                                            Log.d(
+                                                NUTRITION_SCANNER_LOG_TAG,
+                                                "Barcode scanned payload: ${barcodeScanResult.allValues}",
+                                            )
+                                            val barcodeValue = barcodeScanResult.selectedValue
+                                            if (!barcodeValue.isNullOrBlank()) {
+                                                mShouldRunOcrFallback = false
+                                                mStatusMessage = "Barcode detected. Fetching product..."
+                                                val productResult = mOpenFoodFactsClient.fetchProductByBarcode(barcodeValue)
+                                                productResult.fold(
+                                                    onSuccess = { apiResult ->
+                                                        Log.d(
+                                                            NUTRITION_SCANNER_LOG_TAG,
+                                                            "Barcode mapped form data: ${apiResult.toLogPayload()}",
+                                                        )
+                                                        mStatusMessage = null
+                                                        onScanResult(apiResult)
+                                                    },
+                                                    onFailure = { error ->
+                                                        mStatusMessage = error.message
+                                                            ?: "Open Food Facts lookup failed."
+                                                    },
+                                                )
                                             }
                                         },
-                                        onFailure = { error ->
-                                            mStatusMessage = error.message ?: "OCR failed."
+                                        onFailure = {
+                                            mStatusMessage = "Barcode scan failed. Reading nutrition label..."
                                         },
                                     )
+
+                                    if (mShouldRunOcrFallback) {
+                                        mStatusMessage = "Reading nutrition label..."
+                                        val ocrResult = withContext(Dispatchers.Default) {
+                                            mOcrEngine.detectText(bitmap)
+                                        }
+                                        ocrResult.fold(
+                                            onSuccess = { detectedText ->
+                                                Log.d(
+                                                    NUTRITION_SCANNER_LOG_TAG,
+                                                    "OCR scanned text:\n$detectedText",
+                                                )
+                                                val parsedResult = NutritionLabelParser.parse(detectedText)
+                                                if (parsedResult == null) {
+                                                    Log.d(
+                                                        NUTRITION_SCANNER_LOG_TAG,
+                                                        "OCR parsed form data: none",
+                                                    )
+                                                    mStatusMessage = "No barcode or readable nutrition values found."
+                                                } else {
+                                                    Log.d(
+                                                        NUTRITION_SCANNER_LOG_TAG,
+                                                        "OCR mapped form data: ${parsedResult.toLogPayload()}",
+                                                    )
+                                                    mStatusMessage = null
+                                                    onScanResult(parsedResult)
+                                                }
+                                            },
+                                            onFailure = { error ->
+                                                mStatusMessage = error.message ?: "OCR failed."
+                                            },
+                                        )
+                                    }
                                     mIsScanning = false
                                 }
                             }
@@ -274,7 +398,7 @@ fun NutritionLabelScannerPage(
                     )
                 },
             ) {
-                Text(if (mIsScanning) "Scanning..." else "Scan label")
+                Text(if (mIsScanning) "Scanning..." else "Scan barcode/label")
             }
         }
 
@@ -296,6 +420,53 @@ fun NutritionLabelScannerPage(
             )
         }
     }
+}
+
+@Composable
+private fun LiveDetectionOverlay(
+    detection: LiveDetectionResult,
+    modifier: Modifier = Modifier,
+) {
+    val mStrokeColor = when (detection.type) {
+        LiveDetectionType.Barcode -> Color(0xFF29DB65)
+        LiveDetectionType.NutritionLabel -> Color(0xFF34A9FF)
+    }
+    val mDetectionLabel = when (detection.type) {
+        LiveDetectionType.Barcode -> "Barcode detected"
+        LiveDetectionType.NutritionLabel -> "Nutrition label detected"
+    }
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val left = size.width * detection.bounds.left
+            val top = size.height * detection.bounds.top
+            val right = size.width * detection.bounds.right
+            val bottom = size.height * detection.bounds.bottom
+            val width = (right - left).coerceAtLeast(0f)
+            val height = (bottom - top).coerceAtLeast(0f)
+            if (width > 0f && height > 0f) {
+                drawRect(
+                    color = mStrokeColor,
+                    topLeft = Offset(x = left, y = top),
+                    size = Size(width = width, height = height),
+                    style = Stroke(width = 6f),
+                )
+            }
+        }
+        Text(
+            text = mDetectionLabel,
+            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 52.dp)
+                .background(Color(0x88000000))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+    }
+}
+
+private fun NutritionLabelScanResult.toLogPayload(): String {
+    return "name=$name, calories=$calories, protein=$protein, carbs=$carbs, fats=$fats, recognizedText=$recognizedText"
 }
 
 private class OnDeviceNutritionOcrEngine {
@@ -327,6 +498,265 @@ private class OnDeviceNutritionOcrEngine {
 
     fun release() {
         mRecognizer.close()
+    }
+}
+
+private class OnDeviceBarcodeScannerEngine {
+    private val mScanner = BarcodeScanning.getClient()
+
+    suspend fun detectBarcode(bitmap: Bitmap): Result<BarcodeCaptureResult> {
+        return runCatching {
+            val barcodes = suspendCancellableCoroutine<List<Barcode>> { continuation ->
+                val inputImage = InputImage.fromBitmap(bitmap, 0)
+                mScanner.process(inputImage)
+                    .addOnSuccessListener { detectedBarcodes ->
+                        if (continuation.isActive) {
+                            continuation.resume(detectedBarcodes)
+                        }
+                    }
+                    .addOnFailureListener { error ->
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(error)
+                        }
+                    }
+            }
+            val allValues = barcodes.mapNotNull { barcode ->
+                barcode.rawValue?.trim()?.takeIf(String::isNotBlank)
+            }
+            BarcodeCaptureResult(
+                allValues = allValues,
+                selectedValue = allValues.firstOrNull(),
+            )
+        }
+    }
+
+    fun release() {
+        mScanner.close()
+    }
+}
+
+private class OnDeviceLiveDetectionEngine {
+    private val mBarcodeScanner = BarcodeScanning.getClient()
+    private val mTextRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val mIsFrameBeingProcessed = AtomicBoolean(false)
+    private val mNutritionKeywords = listOf(
+        "nutrition",
+        "calories",
+        "energy",
+        "protein",
+        "carbohydrate",
+        "carbs",
+        "fat",
+        "fats",
+        "sugar",
+    )
+
+    fun analyze(
+        imageProxy: ImageProxy,
+        onDetection: (LiveDetectionResult?) -> Unit,
+    ) {
+        val mediaImage = imageProxy.image
+        if (mediaImage == null) {
+            imageProxy.close()
+            return
+        }
+        if (!mIsFrameBeingProcessed.compareAndSet(false, true)) {
+            imageProxy.close()
+            return
+        }
+
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+        val frameWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
+            mediaImage.height
+        } else {
+            mediaImage.width
+        }
+        val frameHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
+            mediaImage.width
+        } else {
+            mediaImage.height
+        }
+        val inputImage = InputImage.fromMediaImage(mediaImage, rotationDegrees)
+
+        fun finish(result: LiveDetectionResult?) {
+            onDetection(result)
+            mIsFrameBeingProcessed.set(false)
+            imageProxy.close()
+        }
+
+        fun normalizedFromRect(rect: Rect): NormalizedBoundingBox? {
+            if (frameWidth <= 0 || frameHeight <= 0) return null
+            val left = (rect.left.toFloat() / frameWidth).coerceIn(0f, 1f)
+            val top = (rect.top.toFloat() / frameHeight).coerceIn(0f, 1f)
+            val right = (rect.right.toFloat() / frameWidth).coerceIn(0f, 1f)
+            val bottom = (rect.bottom.toFloat() / frameHeight).coerceIn(0f, 1f)
+            if (right <= left || bottom <= top) return null
+            return NormalizedBoundingBox(left = left, top = top, right = right, bottom = bottom)
+        }
+
+        fun runNutritionLabelDetection() {
+            mTextRecognizer.process(inputImage)
+                .addOnSuccessListener { textResult ->
+                    val nutritionBlocks = textResult.textBlocks.filter { block ->
+                        val normalizedText = block.text.lowercase()
+                        mNutritionKeywords.any { keyword -> normalizedText.contains(keyword) }
+                    }
+                    val mergedRect = mergeRectangles(nutritionBlocks.mapNotNull { block -> block.boundingBox })
+                    val normalizedRect = mergedRect?.let(::normalizedFromRect)
+                    if (normalizedRect == null) {
+                        finish(null)
+                    } else {
+                        finish(
+                            LiveDetectionResult(
+                                type = LiveDetectionType.NutritionLabel,
+                                bounds = normalizedRect,
+                            ),
+                        )
+                    }
+                }
+                .addOnFailureListener {
+                    finish(null)
+                }
+        }
+
+        mBarcodeScanner.process(inputImage)
+            .addOnSuccessListener { barcodes ->
+                val detectedBarcode = barcodes.firstOrNull { barcode ->
+                    !barcode.rawValue.isNullOrBlank() && barcode.boundingBox != null
+                }
+                val normalizedRect = detectedBarcode?.boundingBox?.let(::normalizedFromRect)
+                if (normalizedRect == null) {
+                    runNutritionLabelDetection()
+                } else {
+                    finish(
+                        LiveDetectionResult(
+                            type = LiveDetectionType.Barcode,
+                            bounds = normalizedRect,
+                        ),
+                    )
+                }
+            }
+            .addOnFailureListener {
+                runNutritionLabelDetection()
+            }
+    }
+
+    fun release() {
+        mBarcodeScanner.close()
+        mTextRecognizer.close()
+    }
+
+    private fun mergeRectangles(rectangles: List<Rect>): Rect? {
+        if (rectangles.isEmpty()) return null
+        val left = rectangles.minOf { rect -> rect.left }
+        val top = rectangles.minOf { rect -> rect.top }
+        val right = rectangles.maxOf { rect -> rect.right }
+        val bottom = rectangles.maxOf { rect -> rect.bottom }
+        return Rect(left, top, right, bottom)
+    }
+}
+
+private class OpenFoodFactsApiClient {
+    suspend fun fetchProductByBarcode(barcode: String): Result<NutritionLabelScanResult> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val sanitizedBarcode = barcode.filter(Char::isDigit)
+                require(sanitizedBarcode.isNotBlank()) { "Detected barcode is invalid." }
+
+                val endpoint = "https://world.openfoodfacts.org/api/v2/product/" +
+                    "${Uri.encode(sanitizedBarcode)}.json" +
+                    "?fields=product_name,product_name_en,nutriments"
+                Log.d(
+                    NUTRITION_SCANNER_LOG_TAG,
+                    "OFF request payload: barcode=$sanitizedBarcode, url=$endpoint",
+                )
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 10_000_000
+                    readTimeout = 10_000_000
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("User-Agent", "Seally/1.0 (support@seally.app)")
+                }
+
+                try {
+                    val responseCode = connection.responseCode
+                    val responseStream = if (responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+                    val body = responseStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    Log.d(
+                        NUTRITION_SCANNER_LOG_TAG,
+                        "OFF response payload: $body",
+                    )
+                    if (responseCode !in 200..299) {
+                        throw IllegalStateException("Open Food Facts request failed ($responseCode).")
+                    }
+                    val jsonObject = JSONObject(body)
+                    if (jsonObject.optInt("status", 0) != 1) {
+                        throw IllegalStateException("No Open Food Facts product found for barcode $sanitizedBarcode.")
+                    }
+                    val productObject = jsonObject.optJSONObject("product")
+                        ?: throw IllegalStateException("Open Food Facts response has no product data.")
+                    val nutriments = productObject.optJSONObject("nutriments") ?: JSONObject()
+
+                    val calories = nutriments.readNumericValue(
+                        "energy-kcal_100g",
+                        "energy-kcal_serving",
+                        "energy-kcal",
+                    )?.roundToInt() ?: 0
+                    val protein = nutriments.readNumericValue(
+                        "proteins_100g",
+                        "proteins_serving",
+                        "proteins",
+                    )?.roundToInt() ?: 0
+                    val carbs = nutriments.readNumericValue(
+                        "carbohydrates_100g",
+                        "carbohydrates_serving",
+                        "carbohydrates",
+                    )?.roundToInt() ?: 0
+                    val fats = nutriments.readNumericValue(
+                        "fat_100g",
+                        "fat_serving",
+                        "fat",
+                    )?.roundToInt() ?: 0
+                    val productName = productObject.optString("product_name")
+                        .ifBlank { productObject.optString("product_name_en") }
+                        .ifBlank { "Scanned barcode product" }
+
+                    val mappedResult = NutritionLabelScanResult(
+                        name = productName,
+                        calories = calories.coerceAtLeast(0),
+                        protein = protein.coerceAtLeast(0),
+                        carbs = carbs.coerceAtLeast(0),
+                        fats = fats.coerceAtLeast(0),
+                        recognizedText = "barcode:$sanitizedBarcode",
+                    )
+                    Log.d(
+                        NUTRITION_SCANNER_LOG_TAG,
+                        "OFF mapped form data: ${mappedResult.toLogPayload()}",
+                    )
+                    mappedResult
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        }
+    }
+
+    private fun JSONObject.readNumericValue(vararg keys: String): Float? {
+        keys.forEach { key ->
+            if (!has(key)) return@forEach
+            when (val value = opt(key)) {
+                is Number -> return value.toFloat()
+                is String -> {
+                    val parsedValue = value.trim().replace(",", ".").toFloatOrNull()
+                    if (parsedValue != null) return parsedValue
+                }
+            }
+        }
+        return null
     }
 }
 
@@ -524,7 +954,7 @@ private fun PermissionRequiredContent(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Camera permission is required to scan nutrition labels.")
+        Text("Camera permission is required to scan nutrition labels and barcodes.")
         Button(onClick = onRequestPermission, modifier = Modifier.padding(top = 12.dp)) {
             Text("Grant camera permission")
         }
