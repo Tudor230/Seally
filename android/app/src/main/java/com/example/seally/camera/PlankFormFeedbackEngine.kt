@@ -46,7 +46,7 @@ class PlankFormFeedbackEngine {
 
         if (!isInPlankPosition) {
             cue = "Get into position"
-            joints = listOf("shoulder", "hip", "ankle")
+            joints = listOf("shoulder", "hip", "knee", "ankle")
         } else if (kneeAngle < PLANK_MIN_KNEE_ANGLE_DEG) {
             cue = "Lift your knees off the ground"
             joints = listOf("hip", "knee", "ankle")
@@ -58,7 +58,7 @@ class PlankFormFeedbackEngine {
             } else {
                 "Keep your body in a straight line"
             }
-            joints = listOf("shoulder", "hip", "ankle")
+            joints = listOf("shoulder", "hip", "knee", "ankle")
         }
 
         val isGoodForm = cue == null
