@@ -32,16 +32,6 @@ enum class MovementPhase {
     ASCENDING,
 }
 
-data class PullUpBarCalibration(
-    val mLeftX: Float,
-    val mLeftY: Float,
-    val mRightX: Float,
-    val mRightY: Float,
-) {
-    val mBarY: Float
-        get() = (mLeftY + mRightY) / 2f
-}
-
 enum class BodySide(
     val mShoulder: Int,
     val mElbow: Int,

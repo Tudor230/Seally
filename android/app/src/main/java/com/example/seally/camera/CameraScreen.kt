@@ -17,7 +17,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,11 +44,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -88,7 +84,6 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mOverlaySize by remember { mutableStateOf(IntSize.Zero) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -222,32 +217,6 @@ fun CameraScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (uiState.mSelectedExercise == ExerciseType.PULLUP) {
-            PullUpCalibrationOverlay(
-                frameWidth = uiState.mFrameWidth,
-                frameHeight = uiState.mFrameHeight,
-                isFrontCamera = uiState.mIsFrontCamera,
-                leftX = uiState.mPullUpBarLeftX,
-                leftY = uiState.mPullUpBarLeftY,
-                rightX = uiState.mPullUpBarRightX,
-                rightY = uiState.mPullUpBarRightY,
-                onOverlaySizeChanged = { mOverlaySize = it },
-                onTap = { tapOffset ->
-                    val normalizedPoint = screenTapToNormalizedPoint(
-                        tap = tapOffset,
-                        overlaySize = Size(mOverlaySize.width.toFloat(), mOverlaySize.height.toFloat()),
-                        frameWidth = uiState.mFrameWidth,
-                        frameHeight = uiState.mFrameHeight,
-                        isFrontCamera = uiState.mIsFrontCamera,
-                    )
-                    if (normalizedPoint != null) {
-                        mViewModel.setPullUpBarPoint(normalizedX = normalizedPoint.x, normalizedY = normalizedPoint.y)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
         if (mIsSwitchingLens && mSwitchSnapshot != null) {
             Image(
                 bitmap = mSwitchSnapshot!!,
@@ -274,12 +243,6 @@ fun CameraScreen(
                         ExerciseType.PULLUP -> "Switch to Squat"
                     },
                 )
-            }
-            if (uiState.mSelectedExercise == ExerciseType.PULLUP) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { mViewModel.clearPullUpBarCalibration() }) {
-                    Text("Reset bar")
-                }
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
@@ -445,116 +408,6 @@ private class ErrorSpeechAnnouncer(context: Context) : TextToSpeech.OnInitListen
         mTextToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         mLastAnnouncedErrorMessage = message
     }
-}
-
-@Composable
-private fun PullUpCalibrationOverlay(
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-    leftX: Float?,
-    leftY: Float?,
-    rightX: Float?,
-    rightY: Float?,
-    onOverlaySizeChanged: (IntSize) -> Unit,
-    onTap: (Offset) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(
-        modifier = modifier
-            .onSizeChanged(onOverlaySizeChanged)
-            .pointerInput(frameWidth, frameHeight, isFrontCamera) {
-                detectTapGestures(onTap = onTap)
-            },
-    ) {
-        if (frameWidth <= 0 || frameHeight <= 0) return@Canvas
-        val calibration = if (leftX != null && leftY != null && rightX != null && rightY != null) {
-            PullUpBarCalibration(
-                mLeftX = leftX,
-                mLeftY = leftY,
-                mRightX = rightX,
-                mRightY = rightY,
-            )
-        } else {
-            null
-        }
-
-        calibration?.let {
-            val left = normalizedToScreenPoint(
-                normalizedX = it.mLeftX,
-                normalizedY = it.mLeftY,
-                canvasSize = size,
-                frameWidth = frameWidth,
-                frameHeight = frameHeight,
-                isFrontCamera = isFrontCamera,
-            )
-            val right = normalizedToScreenPoint(
-                normalizedX = it.mRightX,
-                normalizedY = it.mRightY,
-                canvasSize = size,
-                frameWidth = frameWidth,
-                frameHeight = frameHeight,
-                isFrontCamera = isFrontCamera,
-            )
-            drawLine(color = Color.Red, start = left, end = right, strokeWidth = 6f)
-            drawCircle(color = Color.Red, radius = 8f, center = left)
-            drawCircle(color = Color.Red, radius = 8f, center = right)
-        } ?: run {
-            if (leftX != null && leftY != null) {
-                val point = normalizedToScreenPoint(
-                    normalizedX = leftX,
-                    normalizedY = leftY,
-                    canvasSize = size,
-                    frameWidth = frameWidth,
-                    frameHeight = frameHeight,
-                    isFrontCamera = isFrontCamera,
-                )
-                drawCircle(color = Color.Red, radius = 8f, center = point)
-            }
-        }
-    }
-}
-
-private fun normalizedToScreenPoint(
-    normalizedX: Float,
-    normalizedY: Float,
-    canvasSize: Size,
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-): Offset {
-    val scale = max(canvasSize.width / frameWidth.toFloat(), canvasSize.height / frameHeight.toFloat())
-    val scaledFrameWidth = frameWidth * scale
-    val scaledFrameHeight = frameHeight * scale
-    val offsetX = (canvasSize.width - scaledFrameWidth) / 2f
-    val offsetY = (canvasSize.height - scaledFrameHeight) / 2f
-    val mirroredX = if (isFrontCamera) 1f - normalizedX else normalizedX
-    return Offset(
-        x = (mirroredX * scaledFrameWidth) + offsetX,
-        y = (normalizedY * scaledFrameHeight) + offsetY,
-    )
-}
-
-private fun screenTapToNormalizedPoint(
-    tap: Offset,
-    overlaySize: Size,
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-): Offset? {
-    if (frameWidth <= 0 || frameHeight <= 0 || overlaySize.width <= 0f || overlaySize.height <= 0f) return null
-    val scale = max(overlaySize.width / frameWidth.toFloat(), overlaySize.height / frameHeight.toFloat())
-    val scaledFrameWidth = frameWidth * scale
-    val scaledFrameHeight = frameHeight * scale
-    val offsetX = (overlaySize.width - scaledFrameWidth) / 2f
-    val offsetY = (overlaySize.height - scaledFrameHeight) / 2f
-
-    val frameX = (tap.x - offsetX) / scaledFrameWidth
-    val frameY = (tap.y - offsetY) / scaledFrameHeight
-    if (frameX !in 0f..1f || frameY !in 0f..1f) return null
-
-    val sourceX = if (isFrontCamera) 1f - frameX else frameX
-    return Offset(sourceX, frameY)
 }
 
 @Composable
