@@ -32,9 +32,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.seally.camera.CameraViewModel
+import androidx.compose.ui.platform.LocalContext
 import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
 import com.example.seally.nutrition.NutritionScreen
@@ -72,10 +70,7 @@ fun SeallyApp() {
                             selected = destination == currentDestination,
                             onClick = { currentDestination = destination },
                             icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.label,
-                                )
+                                DestinationIcon(destination)
                             },
                             label = { Text(destination.label) },
                         )
