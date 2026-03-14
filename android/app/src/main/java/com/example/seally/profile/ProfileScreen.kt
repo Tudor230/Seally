@@ -225,6 +225,11 @@ fun ProfileScreen(
                             heightCm = heightCm,
                             weightKg = weightKg,
                             goalWeightKg = goalWeightKg,
+                            activityType = profile.activityType,
+                            workoutDaysPerWeek = profile.workoutDaysPerWeek,
+                            journeyGoal = profile.journeyGoal,
+                            waterTargetMl = profile.waterTargetMl,
+                            onboardingCompleted = profile.onboardingCompleted,
                         )
                     )
                     onBackClick()
