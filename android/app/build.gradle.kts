@@ -6,7 +6,8 @@ plugins {
 fun String.toGradleStringLiteral(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 val livekitUrl = (project.findProperty("LIVEKIT_URL") as String?) ?: ""
-val livekitToken = (project.findProperty("LIVEKIT_TOKEN") as String?) ?: ""
+val livekitApiKey = (project.findProperty("LIVEKIT_API_KEY") as String?) ?: ""
+val livekitApiSecret = (project.findProperty("LIVEKIT_API_SECRET") as String?) ?: ""
 val livekitLandmarkTopic = (project.findProperty("LIVEKIT_LANDMARK_TOPIC") as String?) ?: "pose.binary.v2"
 
 android {
@@ -27,7 +28,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         resValue("string", "livekit_url", livekitUrl.toGradleStringLiteral())
-        resValue("string", "livekit_token", livekitToken.toGradleStringLiteral())
+        resValue("string", "livekit_api_key", livekitApiKey.toGradleStringLiteral())
+        resValue("string", "livekit_api_secret", livekitApiSecret.toGradleStringLiteral())
         resValue("string", "livekit_landmark_topic", livekitLandmarkTopic.toGradleStringLiteral())
     }
 
