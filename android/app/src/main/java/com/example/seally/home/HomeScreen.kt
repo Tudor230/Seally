@@ -57,7 +57,7 @@ fun HomeScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/skinny - no background.png")
+        .data("file:///android_asset/icons/lilseal.png")
         .build()
 
     val profilePictureRequest = ImageRequest.Builder(context)

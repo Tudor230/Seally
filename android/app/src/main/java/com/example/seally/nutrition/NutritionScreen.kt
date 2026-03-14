@@ -1,5 +1,7 @@
 package com.example.seally.nutrition
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -202,13 +206,15 @@ private fun KitchenMainPage(
 
         IconOnlyActionButton(
             onClick = onOpenFood,
-            iconGlyph = "🍽️",
+            iconAssetPath = "icons/fish.png",
+            contentDescription = "Open food tracking",
             modifier = Modifier.align(Alignment.BottomStart),
         )
 
         IconOnlyActionButton(
             onClick = onOpenWater,
-            iconGlyph = "💧",
+            iconAssetPath = "icons/drop.png",
+            contentDescription = "Open water tracking",
             modifier = Modifier.align(Alignment.BottomEnd),
         )
     }
@@ -336,11 +342,13 @@ private fun FoodTrackingPage(
         ) {
             IconOnlyActionButton(
                 onClick = onOpenCamera,
-                iconGlyph = "📷",
+                iconAssetPath = "icons/camera1.png",
+                contentDescription = "Open camera scanner",
             )
             IconOnlyActionButton(
                 onClick = { shouldShowAddFoodDialog = true },
-                iconGlyph = "✍️",
+                iconAssetPath = "icons/writing.png",
+                contentDescription = "Add food manually",
             )
         }
     }
@@ -423,7 +431,8 @@ private fun WaterTrackingPage(
             Spacer(modifier = Modifier.height(14.dp))
             IconOnlyActionButton(
                 onClick = { onAddWater(selectedQuantity) },
-                iconGlyph = "💧",
+                iconAssetPath = "icons/drop.png",
+                contentDescription = "Add water",
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
@@ -549,7 +558,9 @@ private fun PlaceholderImage(
 @Composable
 private fun IconOnlyActionButton(
     onClick: () -> Unit,
-    iconGlyph: String,
+    iconGlyph: String? = null,
+    iconAssetPath: String? = null,
+    contentDescription: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val isDarkMode = androidx.compose.foundation.isSystemInDarkTheme()
@@ -577,11 +588,30 @@ private fun IconOnlyActionButton(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = iconGlyph,
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-            )
+            if (iconAssetPath != null) {
+                val context = LocalContext.current
+                val iconBitmap = remember(iconAssetPath) {
+                    context.assets.open(iconAssetPath).use { input ->
+                        checkNotNull(BitmapFactory.decodeStream(input)) {
+                            "Failed to decode icon asset: $iconAssetPath"
+                        }.asImageBitmap()
+                    }
+                }
+                Image(
+                    bitmap = iconBitmap,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(34.dp),
+                )
+            } else {
+                val safeGlyph = checkNotNull(iconGlyph) {
+                    "iconGlyph is required when iconAssetPath is null"
+                }
+                Text(
+                    text = safeGlyph,
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }

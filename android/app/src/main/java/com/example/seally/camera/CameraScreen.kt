@@ -1,12 +1,17 @@
 package com.example.seally.camera
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.util.Range
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -15,7 +20,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,11 +47,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -57,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.math.max
 
@@ -85,7 +87,7 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mOverlaySize by remember { mutableStateOf(IntSize.Zero) }
+    var mLastShownGuideExercise by remember { mutableStateOf<ExerciseType?>(null) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -140,6 +142,40 @@ fun CameraScreen(
         return
     }
 
+    LaunchedEffect(
+        uiState.mHasCompletedInitialPermissionCheck,
+        uiState.mHasCameraPermission,
+        uiState.mIsStartupCameraLoading,
+        uiState.mSelectedExercise,
+    ) {
+        if (
+            !uiState.mHasCompletedInitialPermissionCheck ||
+            !uiState.mHasCameraPermission ||
+            uiState.mIsStartupCameraLoading
+        ) {
+            mLastShownGuideExercise = null
+            return@LaunchedEffect
+        }
+        if (mLastShownGuideExercise == uiState.mSelectedExercise) return@LaunchedEffect
+        context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
+        mLastShownGuideExercise = uiState.mSelectedExercise
+    }
+
+    val mMessageToAnnounce = uiState.mErrorMessage
+        ?: uiState.mFormFeedback.mErrorMessage
+        ?: uiState.mFormFeedback.mSpeechCue
+    val mErrorSpeechAnnouncer = remember(context) { ErrorSpeechAnnouncer(context) }
+
+    LaunchedEffect(mMessageToAnnounce) {
+        mErrorSpeechAnnouncer.onErrorMessage(mMessageToAnnounce)
+    }
+
+    DisposableEffect(mErrorSpeechAnnouncer) {
+        onDispose {
+            mErrorSpeechAnnouncer.release()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -165,7 +201,12 @@ fun CameraScreen(
                         surfaceProvider = previewView.surfaceProvider
                     }
 
-                    val imageAnalyzer = ImageAnalysis.Builder()
+                    val imageAnalysisBuilder = ImageAnalysis.Builder()
+                    Camera2Interop.Extender(imageAnalysisBuilder).setCaptureRequestOption(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        Range(TARGET_CAMERA_FPS, TARGET_CAMERA_FPS),
+                    )
+                    val imageAnalyzer = imageAnalysisBuilder
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -204,32 +245,6 @@ fun CameraScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (uiState.mSelectedExercise == ExerciseType.PULLUP) {
-            PullUpCalibrationOverlay(
-                frameWidth = uiState.mFrameWidth,
-                frameHeight = uiState.mFrameHeight,
-                isFrontCamera = uiState.mIsFrontCamera,
-                leftX = uiState.mPullUpBarLeftX,
-                leftY = uiState.mPullUpBarLeftY,
-                rightX = uiState.mPullUpBarRightX,
-                rightY = uiState.mPullUpBarRightY,
-                onOverlaySizeChanged = { mOverlaySize = it },
-                onTap = { tapOffset ->
-                    val normalizedPoint = screenTapToNormalizedPoint(
-                        tap = tapOffset,
-                        overlaySize = Size(mOverlaySize.width.toFloat(), mOverlaySize.height.toFloat()),
-                        frameWidth = uiState.mFrameWidth,
-                        frameHeight = uiState.mFrameHeight,
-                        isFrontCamera = uiState.mIsFrontCamera,
-                    )
-                    if (normalizedPoint != null) {
-                        mViewModel.setPullUpBarPoint(normalizedX = normalizedPoint.x, normalizedY = normalizedPoint.y)
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
         if (mIsSwitchingLens && mSwitchSnapshot != null) {
             Image(
                 bitmap = mSwitchSnapshot!!,
@@ -256,12 +271,6 @@ fun CameraScreen(
                         ExerciseType.PULLUP -> "Switch to Squat"
                     },
                 )
-            }
-            if (uiState.mSelectedExercise == ExerciseType.PULLUP) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { mViewModel.clearPullUpBarCalibration() }) {
-                    Text("Reset bar")
-                }
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
@@ -296,6 +305,18 @@ fun CameraScreen(
                 .padding(12.dp),
         )
     }
+}
+
+private fun createExerciseGuideIntent(
+    context: Context,
+    exerciseType: ExerciseType,
+): Intent {
+    val activityClass = when (exerciseType) {
+        ExerciseType.SQUAT -> SquatGuideActivity::class.java
+        ExerciseType.PLANK -> PlankGuideActivity::class.java
+        ExerciseType.PULLUP -> PullupGuideActivity::class.java
+    }
+    return Intent(context, activityClass)
 }
 
 @Composable
@@ -375,114 +396,67 @@ private fun formatDuration(durationMs: Long): String {
     return "%02d:%02d".format(minutes, seconds)
 }
 
-@Composable
-private fun PullUpCalibrationOverlay(
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-    leftX: Float?,
-    leftY: Float?,
-    rightX: Float?,
-    rightY: Float?,
-    onOverlaySizeChanged: (IntSize) -> Unit,
-    onTap: (Offset) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(
-        modifier = modifier
-            .onSizeChanged(onOverlaySizeChanged)
-            .pointerInput(frameWidth, frameHeight, isFrontCamera) {
-                detectTapGestures(onTap = onTap)
-            },
-    ) {
-        if (frameWidth <= 0 || frameHeight <= 0) return@Canvas
-        val calibration = if (leftX != null && leftY != null && rightX != null && rightY != null) {
-            PullUpBarCalibration(
-                mLeftX = leftX,
-                mLeftY = leftY,
-                mRightX = rightX,
-                mRightY = rightY,
-            )
-        } else {
-            null
+private const val TARGET_CAMERA_FPS = 30
+
+private class ErrorSpeechAnnouncer(context: Context) : TextToSpeech.OnInitListener {
+    private val mTextToSpeech = TextToSpeech(context.applicationContext, this)
+    private var mIsReady = false
+    private var mPendingErrorMessage: String? = null
+    private var mLastAnnouncedErrorMessage: String? = null
+
+    override fun onInit(status: Int) {
+        if (status != TextToSpeech.SUCCESS) {
+            mIsReady = false
+            return
         }
 
-        calibration?.let {
-            val left = normalizedToScreenPoint(
-                normalizedX = it.mLeftX,
-                normalizedY = it.mLeftY,
-                canvasSize = size,
-                frameWidth = frameWidth,
-                frameHeight = frameHeight,
-                isFrontCamera = isFrontCamera,
-            )
-            val right = normalizedToScreenPoint(
-                normalizedX = it.mRightX,
-                normalizedY = it.mRightY,
-                canvasSize = size,
-                frameWidth = frameWidth,
-                frameHeight = frameHeight,
-                isFrontCamera = isFrontCamera,
-            )
-            drawLine(color = Color.Red, start = left, end = right, strokeWidth = 6f)
-            drawCircle(color = Color.Red, radius = 8f, center = left)
-            drawCircle(color = Color.Red, radius = 8f, center = right)
-        } ?: run {
-            if (leftX != null && leftY != null) {
-                val point = normalizedToScreenPoint(
-                    normalizedX = leftX,
-                    normalizedY = leftY,
-                    canvasSize = size,
-                    frameWidth = frameWidth,
-                    frameHeight = frameHeight,
-                    isFrontCamera = isFrontCamera,
-                )
-                drawCircle(color = Color.Red, radius = 8f, center = point)
-            }
+        val defaultLanguageResult = mTextToSpeech.setLanguage(Locale.getDefault())
+        if (
+            defaultLanguageResult == TextToSpeech.LANG_MISSING_DATA ||
+            defaultLanguageResult == TextToSpeech.LANG_NOT_SUPPORTED
+        ) {
+            mTextToSpeech.setLanguage(Locale.US)
+        }
+
+        // Keep TTS usable even if locale selection reports unsupported.
+        mIsReady = true
+        val pendingMessage = mPendingErrorMessage
+        if (pendingMessage != null) {
+            speakError(pendingMessage)
+            mPendingErrorMessage = null
         }
     }
-}
 
-private fun normalizedToScreenPoint(
-    normalizedX: Float,
-    normalizedY: Float,
-    canvasSize: Size,
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-): Offset {
-    val scale = max(canvasSize.width / frameWidth.toFloat(), canvasSize.height / frameHeight.toFloat())
-    val scaledFrameWidth = frameWidth * scale
-    val scaledFrameHeight = frameHeight * scale
-    val offsetX = (canvasSize.width - scaledFrameWidth) / 2f
-    val offsetY = (canvasSize.height - scaledFrameHeight) / 2f
-    val mirroredX = if (isFrontCamera) 1f - normalizedX else normalizedX
-    return Offset(
-        x = (mirroredX * scaledFrameWidth) + offsetX,
-        y = (normalizedY * scaledFrameHeight) + offsetY,
-    )
-}
+    fun onErrorMessage(message: String?) {
+        val normalizedMessage = message
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
-private fun screenTapToNormalizedPoint(
-    tap: Offset,
-    overlaySize: Size,
-    frameWidth: Int,
-    frameHeight: Int,
-    isFrontCamera: Boolean,
-): Offset? {
-    if (frameWidth <= 0 || frameHeight <= 0 || overlaySize.width <= 0f || overlaySize.height <= 0f) return null
-    val scale = max(overlaySize.width / frameWidth.toFloat(), overlaySize.height / frameHeight.toFloat())
-    val scaledFrameWidth = frameWidth * scale
-    val scaledFrameHeight = frameHeight * scale
-    val offsetX = (overlaySize.width - scaledFrameWidth) / 2f
-    val offsetY = (overlaySize.height - scaledFrameHeight) / 2f
+        if (normalizedMessage == null) {
+            mLastAnnouncedErrorMessage = null
+            return
+        }
 
-    val frameX = (tap.x - offsetX) / scaledFrameWidth
-    val frameY = (tap.y - offsetY) / scaledFrameHeight
-    if (frameX !in 0f..1f || frameY !in 0f..1f) return null
+        if (normalizedMessage == mLastAnnouncedErrorMessage) return
 
-    val sourceX = if (isFrontCamera) 1f - frameX else frameX
-    return Offset(sourceX, frameY)
+        if (!mIsReady) {
+            mPendingErrorMessage = normalizedMessage
+            return
+        }
+
+        speakError(normalizedMessage)
+    }
+
+    fun release() {
+        mTextToSpeech.stop()
+        mTextToSpeech.shutdown()
+    }
+
+    private fun speakError(message: String) {
+        val utteranceId = "error_${message.hashCode()}"
+        mTextToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        mLastAnnouncedErrorMessage = message
+    }
 }
 
 @Composable
