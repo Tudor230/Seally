@@ -5,18 +5,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -43,6 +40,10 @@ fun HomeScreen(
         .data("file:///android_asset/icons/skinny - no background.png")
         .build()
 
+    // Temporary progress values (wire these to real state later)
+    val caloriesProgress = 0.55f
+    val waterProgress = 0.35f
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -61,12 +62,14 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onProfileClick,
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                modifier = Modifier.background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    CircleShape
+                )
             ) {
                 Icon(
                     imageVector = Icons.Default.AccountCircle,
@@ -76,11 +79,22 @@ fun HomeScreen(
                 )
             }
 
+            // Centered level line between Profile and Settings
+            AsyncImage(
+                model = headerImageRequest,
+                contentDescription = "Level Line",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+                    .height(24.dp)
+            )
+
             IconButton(onClick = onSettingsClick) {
                 AsyncImage(
                     model = settingsSvgRequest,
                     contentDescription = "Settings",
-                    modifier = Modifier.size(32.dp), // Normalized size
+                    modifier = Modifier.size(40.dp),
                 )
             }
         }
@@ -89,49 +103,97 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 100.dp), // Space for bottom nav
+                .padding(
+                    top = 90.dp, // Space for top bar.dp, // moved 50dp further below the top bar
+                    bottom = 100.dp // Space for bottom nav
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Section: Title & Header Line
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 40.dp)
+            // Additional gap so the stat lines sit even lower
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Calories + Water (side-by-side)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "Welcome Back",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1).sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
+                StatLine(
+                    icon = Icons.Default.Favorite,
+                    label = "Calories",
+                    progress = caloriesProgress,
+                    modifier = Modifier.weight(1f)
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                AsyncImage(
-                    model = headerImageRequest,
-                    contentDescription = "Decorative Line",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.width(180.dp)
+                StatLine(
+                    icon = Icons.Default.AccountCircle,
+                    label = "Water",
+                    progress = waterProgress,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-            // Bottom Section: Character
-            Box(
-                contentAlignment = Alignment.BottomCenter,
-                modifier = Modifier.weight(1f)
-            ) {
+            Spacer(modifier = Modifier.weight(1f))
 
-                AsyncImage(
-                    model = skinnyImageRequest,
-                    contentDescription = "Character",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxHeight(0.85f)
-                        .padding(horizontal = 24.dp)
-                )
-            }
+            // Character (bigger)
+            AsyncImage(
+                model = skinnyImageRequest,
+                contentDescription = "Character",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxHeight(0.92f)
+                    .padding(horizontal = 12.dp)
+            )
         }
+    }
+}
+
+@Composable
+private fun StatLine(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    progress: Float,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Text(
+                text = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
     }
 }

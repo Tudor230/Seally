@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
 @PreviewScreenSizes
 @Composable
 fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXERCISES) }
+    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
