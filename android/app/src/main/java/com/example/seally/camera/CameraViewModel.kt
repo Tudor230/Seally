@@ -376,11 +376,64 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mLiveKitPublisher.disconnect()
     }
 
+    private fun jointNameToIndex(jointName: String): List<Int> {
+        val name = jointName.lowercase().replace(" ", "_")
+        return when (name) {
+            "nose" -> listOf(0)
+            "left_eye_inner" -> listOf(1)
+            "left_eye" -> listOf(2)
+            "left_eye_outer" -> listOf(3)
+            "right_eye_inner" -> listOf(4)
+            "right_eye" -> listOf(5)
+            "right_eye_outer" -> listOf(6)
+            "left_ear" -> listOf(7)
+            "right_ear" -> listOf(8)
+            "mouth_left" -> listOf(9)
+            "mouth_right" -> listOf(10)
+            "mouth" -> listOf(9, 10)
+            "left_shoulder" -> listOf(11)
+            "right_shoulder" -> listOf(12)
+            "shoulder" -> listOf(11, 12)
+            "left_elbow" -> listOf(13)
+            "right_elbow" -> listOf(14)
+            "elbow" -> listOf(13, 14)
+            "elbows" -> listOf(13, 14)
+            "left_wrist" -> listOf(15)
+            "right_wrist" -> listOf(16)
+            "wrist" -> listOf(15, 16)
+            "wrists" -> listOf(15, 16)
+            "left_pinky" -> listOf(17)
+            "right_pinky" -> listOf(18)
+            "left_index" -> listOf(19)
+            "right_index" -> listOf(20)
+            "left_thumb" -> listOf(21)
+            "right_thumb" -> listOf(22)
+            "left_hip" -> listOf(23)
+            "right_hip" -> listOf(24)
+            "hip" -> listOf(23, 24)
+            "left_knee" -> listOf(25)
+            "right_knee" -> listOf(26)
+            "knee" -> listOf(25, 26)
+            "left_ankle" -> listOf(27)
+            "right_ankle" -> listOf(28)
+            "ankle" -> listOf(27, 28)
+            "left_heel" -> listOf(29)
+            "right_heel" -> listOf(30)
+            "left_foot_index" -> listOf(31)
+            "right_foot_index" -> listOf(32)
+            else -> emptyList()
+        }
+    }
+
     private fun maybePublishLandmarks(landmarks: List<NormalizedLandmark>) {
         val nowMs = SystemClock.elapsedRealtime()
         if (nowMs - mLastLandmarkSentAtMs < LANDMARK_SEND_MIN_INTERVAL_MS) return
 
         val state = mUiState.value
+        val problematicJointIndices = state.mFormFeedback.mProblematicJoints.flatMap { jointName ->
+            jointNameToIndex(jointName)
+        }
+        Log.d(mTag, "Problematic joints: ${state.mFormFeedback.mProblematicJoints} -> indices: $problematicJointIndices")
         val payload = LandmarkPacketEncoder.encode(
             sequence = mLandmarkSequence,
             timestampMs = nowMs,
@@ -388,6 +441,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             frameHeight = state.mFrameHeight,
             isFrontCamera = state.mIsFrontCamera,
             landmarks = landmarks,
+            problematicJoints = problematicJointIndices,
         )
         mLandmarkSequence += 1L
 

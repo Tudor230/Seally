@@ -3,6 +3,7 @@ import { Room, RoomEvent } from 'livekit-client'
 import { generateViewerToken, generateRoomCode } from './lib/livekitToken'
 import './App.css'
 
+const LANDMARK_URL = import.meta.env.VITE_LIVEKIT_URL || ''
 const LANDMARK_TOPIC = import.meta.env.VITE_LIVEKIT_LANDMARK_TOPIC || 'pose.binary.v2'
 const FORCE_RELAY = (import.meta.env.VITE_LIVEKIT_FORCE_RELAY || 'true') !== 'false'
 const LANDMARK_PACKET_VERSION = 2
@@ -10,6 +11,8 @@ const LANDMARK_PACKET_HEADER_BYTES = 16
 const LANDMARK_PACKET_BYTES_PER_LANDMARK = 6
 const LANDMARK_SCALE = 10000
 const FRONT_CAMERA_FLAG = 0x01
+const PROBLEMATIC_JOINTS_FLAG = 0x02
+const PROBLEMATIC_JOINTS_BYTES = 4
 const POSE_CONNECTIONS = [
   [0, 1], [0, 4], [1, 2], [2, 3], [3, 7], [4, 5], [5, 6], [6, 8],
   [9, 10], [11, 12],
@@ -52,7 +55,12 @@ function App() {
     }
 
     const landmarkCount = view.getUint16(2, true)
-    const expectedBytes = LANDMARK_PACKET_HEADER_BYTES + (landmarkCount * LANDMARK_PACKET_BYTES_PER_LANDMARK)
+    const flags = view.getUint8(1)
+    const isFrontCamera = (flags & FRONT_CAMERA_FLAG) !== 0
+    const hasProblematicJoints = (flags & PROBLEMATIC_JOINTS_FLAG) !== 0
+
+    const expectedExtraBytes = hasProblematicJoints ? PROBLEMATIC_JOINTS_BYTES : 0
+    const expectedBytes = LANDMARK_PACKET_HEADER_BYTES + (landmarkCount * LANDMARK_PACKET_BYTES_PER_LANDMARK) + expectedExtraBytes
     if (view.byteLength !== expectedBytes) {
       throw new Error(`invalid packet size ${view.byteLength}, expected ${expectedBytes}`)
     }
@@ -60,8 +68,6 @@ function App() {
     const sequence = view.getUint32(4, true)
     const frameWidth = view.getUint16(12, true)
     const frameHeight = view.getUint16(14, true)
-    const flags = view.getUint8(1)
-    const isFrontCamera = (flags & FRONT_CAMERA_FLAG) !== 0
     const landmarks = []
     let offset = LANDMARK_PACKET_HEADER_BYTES
     for (let index = 0; index < landmarkCount; index += 1) {
@@ -71,7 +77,43 @@ function App() {
       landmarks.push({ x, y, z })
       offset += LANDMARK_PACKET_BYTES_PER_LANDMARK
     }
-    return { sequence, landmarkCount, frameWidth, frameHeight, isFrontCamera, landmarks }
+
+    let problematicBitmask = 0
+    if (hasProblematicJoints) {
+      problematicBitmask = view.getUint32(offset, true)
+      console.log('Problematic joints bitmask:', problematicBitmask.toString(2), 'joints:', getProblematicJointIndices(problematicBitmask).map(i => jointNames[i] || i))
+    }
+
+    return { sequence, landmarkCount, frameWidth, frameHeight, isFrontCamera, landmarks, problematicBitmask }
+  }
+
+  const jointNames = {
+    0: 'nose',
+    1: 'left_eye_inner', 2: 'left_eye', 3: 'left_eye_outer',
+    4: 'right_eye_inner', 5: 'right_eye', 6: 'right_eye_outer',
+    7: 'left_ear', 8: 'right_ear',
+    9: 'mouth_left', 10: 'mouth_right',
+    11: 'left_shoulder', 12: 'right_shoulder',
+    13: 'left_elbow', 14: 'right_elbow',
+    15: 'left_wrist', 16: 'right_wrist',
+    17: 'left_pinky', 18: 'right_pinky',
+    19: 'left_index', 20: 'right_index',
+    21: 'left_thumb', 22: 'right_thumb',
+    23: 'left_hip', 24: 'right_hip',
+    25: 'left_knee', 26: 'right_knee',
+    27: 'left_ankle', 28: 'right_ankle',
+    29: 'left_heel', 30: 'right_heel',
+    31: 'left_foot_index', 32: 'right_foot_index',
+  }
+
+  const getProblematicJointIndices = (bitmask) => {
+    const indices = []
+    for (let i = 0; i < 33; i += 1) {
+      if ((bitmask & (1 << i)) !== 0) {
+        indices.push(i)
+      }
+    }
+    return indices
   }
 
   const drawSkeleton = (frame) => {
@@ -139,24 +181,34 @@ function App() {
       }
     }
 
-    ctx.strokeStyle = '#00ffff'
+    const isProblematicJoint = (index) => {
+      if (!frame.problematicBitmask) return false
+      return (frame.problematicBitmask & (1 << index)) !== 0
+    }
+
+    // Draw connections - use red only for connections between two problematic joints
     ctx.lineWidth = 3
     for (const [startIndex, endIndex] of POSE_CONNECTIONS) {
       const start = mapPoint(frame.landmarks[startIndex])
       const end = mapPoint(frame.landmarks[endIndex])
       if (!start || !end) continue
+
+      const isProblematic = isProblematicJoint(startIndex) && isProblematicJoint(endIndex)
+      ctx.strokeStyle = isProblematic ? '#ff4444' : '#00ffff'
       ctx.beginPath()
       ctx.moveTo(start.x, start.y)
       ctx.lineTo(end.x, end.y)
       ctx.stroke()
     }
 
-    ctx.fillStyle = '#ffe300'
-    for (const landmark of frame.landmarks) {
+    // Draw joints - red for problematic, yellow for normal
+    for (let i = 0; i < frame.landmarks.length; i += 1) {
+      const landmark = frame.landmarks[i]
       const point = mapPoint(landmark)
       if (!point) continue
+      ctx.fillStyle = isProblematicJoint(i) ? '#ff4444' : '#ffe300'
       ctx.beginPath()
-      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
+      ctx.arc(point.x, point.y, 5, 0, Math.PI * 2)
       ctx.fill()
     }
   }
