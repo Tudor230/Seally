@@ -3,6 +3,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+fun String.toGradleStringLiteral(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val livekitUrl = (project.findProperty("LIVEKIT_URL") as String?) ?: ""
+val livekitToken = (project.findProperty("LIVEKIT_TOKEN") as String?) ?: ""
+val livekitLandmarkTopic = (project.findProperty("LIVEKIT_LANDMARK_TOPIC") as String?) ?: "pose.binary.v2"
+
 android {
     namespace = "com.example.seally"
     compileSdk {
@@ -19,6 +25,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        resValue("string", "livekit_url", livekitUrl.toGradleStringLiteral())
+        resValue("string", "livekit_token", livekitToken.toGradleStringLiteral())
+        resValue("string", "livekit_landmark_topic", livekitLandmarkTopic.toGradleStringLiteral())
     }
 
     buildTypes {
@@ -39,6 +49,7 @@ android {
     }
     buildFeatures {
         compose = true
+        resValues = true
     }
     packaging {
         resources {
@@ -82,6 +93,8 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.vision.common)
+    implementation("io.livekit:livekit-android:2.18.2")
+    implementation("io.livekit:livekit-android-camerax:2.18.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -28,14 +28,13 @@ class PoseLandmarkerHelper(
 ) {
     private val mTaskGraphLock = Any()
     private var mPoseLandmarker: PoseLandmarker? = null
-    private var mLastTimestampMs: Long = 0L
     private var mIsReadyForDetection: Boolean = false
 
     fun setup() {
         synchronized(mTaskGraphLock) {
             clearLocked()
 
-            val started = createLandmarker(useGpu = true) || createLandmarker(useGpu = false)
+            val started = createLandmarker(useGpu = true)
 
             mIsReadyForDetection = started
             if (!started) {
@@ -54,8 +53,8 @@ class PoseLandmarkerHelper(
 
             val options = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
-                .setMinPoseDetectionConfidence(0.5f)
-                .setMinTrackingConfidence(0.5f)
+                .setMinPoseDetectionConfidence(0.3f)
+                .setMinTrackingConfidence(0.3f)
                 .setRunningMode(RunningMode.LIVE_STREAM)
                 .setNumPoses(mNumPoses)
                 .setResultListener { result, _ ->
@@ -69,29 +68,23 @@ class PoseLandmarkerHelper(
             mPoseLandmarker = PoseLandmarker.createFromOptions(mContext, options)
             true
         }.getOrElse { exception ->
-            if (!useGpu) {
-                mErrorListener(exception.message ?: "Failed to initialize PoseLandmarker")
-            }
+            mErrorListener(exception.message ?: "Failed to initialize PoseLandmarker")
             false
         }
     }
 
     @ExperimentalGetImage
     fun detectLiveStreamFrame(imageProxy: ImageProxy) {
-        try {
-            val mpImage = imageProxyToMpImage(imageProxy) ?: return
-            val frameTimestampMs = normalizeTimestampMs(imageProxy.imageInfo.timestamp / NANOS_IN_MILLI) ?: return
+        val mpImage = imageProxyToMpImage(imageProxy) ?: return
+        val frameTimestampMs = imageProxy.imageInfo.timestamp / NANOS_IN_MILLI
 
-            runCatching {
-                synchronized(mTaskGraphLock) {
-                    if (!mIsReadyForDetection) return@runCatching
-                    mPoseLandmarker?.detectAsync(mpImage, frameTimestampMs)
-                }
-            }.onFailure {
-                mErrorListener(it.message ?: "Pose detection failed")
+        runCatching {
+            synchronized(mTaskGraphLock) {
+                if (!mIsReadyForDetection) return@runCatching
+                mPoseLandmarker?.detectAsync(mpImage, frameTimestampMs)
             }
-        } finally {
-            imageProxy.close()
+        }.onFailure {
+            mErrorListener(it.message ?: "Pose detection failed")
         }
     }
 
@@ -142,13 +135,6 @@ class PoseLandmarkerHelper(
         return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
     }
 
-    // Drop out-of-order frames; forcing +1ms can make stale frames appear late on screen.
-    private fun normalizeTimestampMs(cameraTimestampMs: Long): Long? {
-        if (cameraTimestampMs <= mLastTimestampMs) return null
-        mLastTimestampMs = cameraTimestampMs
-        return cameraTimestampMs
-    }
-
     fun clear() {
         synchronized(mTaskGraphLock) {
             clearLocked()
@@ -159,7 +145,6 @@ class PoseLandmarkerHelper(
         mIsReadyForDetection = false
         mPoseLandmarker?.close()
         mPoseLandmarker = null
-        mLastTimestampMs = 0L
     }
 
     companion object {
