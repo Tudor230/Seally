@@ -1,0 +1,92 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+  color: #f5f5f5;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+  background: #21242b;
+  border: 1px solid #393f4a;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+input,
+textarea {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #495160;
+  background: #12151c;
+  color: #fff;
+  padding: 10px;
+}
+
+textarea {
+  min-height: 90px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid #546179;
+  padding: 8px 14px;
+  cursor: pointer;
+  color: #fff;
+  background: #2f6cf4;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.debug {
+  color: #a8b3c7;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.error {
+  color: #ff8484;
+}
+
+.video-stage {
+  margin-top: 12px;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.video-container,
+.remote-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.remote-video {
+  object-fit: contain;
+}

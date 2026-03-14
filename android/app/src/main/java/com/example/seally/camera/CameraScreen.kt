@@ -268,6 +268,17 @@ fun CameraScreen(
             )
         }
 
+        Text(
+            text = uiState.mLiveKitStatus,
+            color = Color.White,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .background(Color(0x88000000))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+
         FeedbackPanel(
             feedback = uiState.mFormFeedback,
             exerciseType = uiState.mSelectedExercise,
