@@ -73,17 +73,17 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.max
 
-private enum class GoalChartType {
+enum class GoalChartType {
     LINE,
     BAR,
 }
 
-private enum class GoalDirection {
+enum class GoalDirection {
     AT_LEAST,
     AT_MOST,
 }
 
-private enum class GoalMetric(
+enum class GoalMetric(
     val mLabel: String,
     val mUnit: String,
     val mAccentColor: Color,
@@ -155,7 +155,7 @@ private enum class GoalMetric(
     ),
 }
 
-private data class GoalUiModel(
+data class GoalUiModel(
     val mId: Long,
     val mMetric: GoalMetric,
     val mCurrentValue: Float,
@@ -167,6 +167,7 @@ private data class GoalUiModel(
 @Composable
 fun GoalsScreen(
     modifier: Modifier = Modifier,
+    onProfileClick: () -> Unit = {},
 ) {
     val mViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val mGoals by mViewModel.mGoals.collectAsState()
@@ -196,12 +197,12 @@ fun GoalsScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            TopHeader()
+            TopHeader(onProfileClick = onProfileClick)
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp),
             ) {
                 if (mGoals.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -818,7 +819,7 @@ private fun buildTrendValues(progress: Float): List<Float> {
     )
 }
 
-private fun GoalUiModel.progress(): Float {
+fun GoalUiModel.progress(): Float {
     return mMetric.calculateProgress(
         currentValue = mCurrentValue,
         targetValue = mTargetValue,
@@ -1000,7 +1001,7 @@ private class GoalsRepository(
     }
 }
 
-private class GoalsViewModel(
+class GoalsViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val mRepository = GoalsRepository(

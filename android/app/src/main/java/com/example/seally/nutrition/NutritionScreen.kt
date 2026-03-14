@@ -168,6 +168,7 @@ class NutritionViewModel : ViewModel() {
 fun NutritionScreen(
     modifier: Modifier = Modifier,
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
+    onProfileClick: () -> Unit = {},
     mViewModel: NutritionViewModel = viewModel(),
 ) {
     val calorieTarget = 2200
@@ -248,7 +249,7 @@ fun NutritionScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (currentPage == NutritionPage.Kitchen) {
-                TopHeader()
+                TopHeader(onProfileClick = onProfileClick)
             }
 
             Box(modifier = Modifier.weight(1f)) {
@@ -483,13 +484,15 @@ private fun FoodTrackingPage(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
@@ -752,8 +755,15 @@ private fun MealCard(
                         )
                     }
                 }
-                IconButton(onClick = onAddClick) {
-                    Icon(Icons.Default.Add, contentDescription = "Add to ${mealType.label}")
+                IconButton(
+                    onClick = onAddClick,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add to ${mealType.label}",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                 }
             }
 
@@ -876,15 +886,17 @@ private fun WaterTrackingPage(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
@@ -1053,7 +1065,9 @@ private fun CameraTrackingPage(
     var mScannedResult by remember { mutableStateOf<NutritionLabelScanResult?>(null) }
 
     NutritionLabelScannerPage(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         onBack = onBack,
         onScanResult = { scanResult -> mScannedResult = scanResult },
     )

@@ -27,18 +27,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
-
-private data class ExerciseEntry(
-    val name: String,
-    val sets: Int,
-    val reps: Int,
-)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -48,9 +43,10 @@ fun CalendarScreen(
 ) {
     val today = remember { LocalDate.now() }
     var selectedDate by rememberSaveable { mutableStateOf(today) }
-    val workoutByDate = remember { mutableStateMapOf<LocalDate, List<ExerciseEntry>>() }
+    val mWorkoutPlanViewModel: WorkoutPlanViewModel = viewModel()
+    val workoutByDate = mWorkoutPlanViewModel.mWorkoutPlans
     var isEntryDialogOpen by rememberSaveable { mutableStateOf(false) }
-    val draftExercises = remember { mutableStateListOf<ExerciseEntry>() }
+    val draftExercises = remember { mutableStateListOf<WorkoutEntry>() }
 
     val pageCount = 1200
     val startPage = pageCount / 2
@@ -83,6 +79,7 @@ fun CalendarScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -90,9 +87,13 @@ fun CalendarScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onBackClick,
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
@@ -144,7 +145,7 @@ fun CalendarScreen(
                                 draftExercises.clear()
                                 workoutByDate[clicked]?.let { existing -> draftExercises.addAll(existing) }
                                 if (draftExercises.isEmpty()) {
-                                    draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
+                                    draftExercises.add(WorkoutEntry(name = "", sets = 3, reps = 10))
                                 }
                                 isEntryDialogOpen = true
                             },
@@ -172,7 +173,7 @@ fun CalendarScreen(
                     draftExercises.clear()
                     workoutByDate[selectedDate]?.let { existing -> draftExercises.addAll(existing) }
                     if (draftExercises.isEmpty()) {
-                        draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
+                        draftExercises.add(WorkoutEntry(name = "", sets = 3, reps = 10))
                     }
                     isEntryDialogOpen = true
                 }) {
@@ -255,11 +256,11 @@ fun CalendarScreen(
             draftExercises = draftExercises,
             onDismiss = { isEntryDialogOpen = false },
             onClear = {
-                workoutByDate.remove(selectedDate)
+                mWorkoutPlanViewModel.clearWorkoutPlan(selectedDate)
                 isEntryDialogOpen = false
             },
             onSave = {
-                workoutByDate[selectedDate] = draftExercises.toList()
+                mWorkoutPlanViewModel.setWorkoutPlan(selectedDate, draftExercises.toList())
                 isEntryDialogOpen = false
             },
         )
@@ -377,7 +378,7 @@ private fun DayCell(
 @Composable
 private fun WorkoutListDialog(
     date: LocalDate,
-    draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<ExerciseEntry>,
+    draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<WorkoutEntry>,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onSave: () -> Unit,
@@ -423,7 +424,7 @@ private fun WorkoutListDialog(
                                 )
                                 IconButton(onClick = {
                                     if (draftExercises.size > 1) draftExercises.removeAt(index)
-                                    else draftExercises[index] = ExerciseEntry("", 3, 10)
+                                    else draftExercises[index] = WorkoutEntry("", 3, 10)
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                                 }
@@ -454,7 +455,7 @@ private fun WorkoutListDialog(
                 }
                 
                 OutlinedButton(
-                    onClick = { draftExercises.add(ExerciseEntry("", 3, 10)) },
+                    onClick = { draftExercises.add(WorkoutEntry("", 3, 10)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {

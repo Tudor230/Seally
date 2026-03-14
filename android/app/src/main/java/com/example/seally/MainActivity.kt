@@ -4,10 +4,13 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -54,6 +57,7 @@ import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
 import com.example.seally.nutrition.NutritionScreen
 import com.example.seally.nutrition.NutritionViewModel
+import com.example.seally.profile.ProfileRoute
 import com.example.seally.ui.theme.SeallyTheme
 
 private val mBottomNavIconSize = 28.dp
@@ -61,7 +65,19 @@ private val mBottomNavIconSize = 28.dp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT,
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                AndroidColor.TRANSPARENT,
+                AndroidColor.TRANSPARENT,
+            ),
+        )
         setContent {
             SeallyTheme {
                 val cameraViewModel: CameraViewModel = viewModel()
@@ -107,10 +123,17 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
         }
     }
     var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
+    var shouldShowBottomBarForExercises by rememberSaveable { mutableStateOf(true) }
+    var shouldShowProfile by rememberSaveable { mutableStateOf(false) }
     val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
     var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
 
     BackHandler {
+        if (shouldShowProfile) {
+            shouldShowProfile = false
+            return@BackHandler
+        }
+
         if (currentDestination == AppDestinations.NUTRITION && nutritionViewModel.canNavigateBackInNutrition()) {
             nutritionViewModel.navigateBackInNutrition()
             return@BackHandler
@@ -137,8 +160,11 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
             modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent,
             bottomBar = {
-                val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
-                    shouldShowBottomBarForNutrition
+                val shouldRenderBottomBar = !shouldShowProfile && when (currentDestination) {
+                    AppDestinations.NUTRITION -> shouldShowBottomBarForNutrition
+                    AppDestinations.EXERCISES -> shouldShowBottomBarForExercises
+                    else -> true
+                }
                 if (shouldRenderBottomBar) {
                     NavigationBar {
                         AppDestinations.entries.forEach { destination ->
@@ -156,28 +182,45 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
             },
         ) { innerPadding ->
             val mLayoutDirection = LocalLayoutDirection.current
+            val mShouldApplyBottomPadding = !shouldShowProfile && when (currentDestination) {
+                AppDestinations.NUTRITION -> shouldShowBottomBarForNutrition
+                AppDestinations.EXERCISES -> shouldShowBottomBarForExercises
+                else -> true
+            }
             val mContentModifier = Modifier.padding(
                 start = innerPadding.calculateStartPadding(mLayoutDirection),
                 end = innerPadding.calculateEndPadding(mLayoutDirection),
-                bottom = innerPadding.calculateBottomPadding(),
+                bottom = if (mShouldApplyBottomPadding) innerPadding.calculateBottomPadding() else 0.dp,
             )
 
-            when (currentDestination) {
-                AppDestinations.NUTRITION -> NutritionScreen(
-                    modifier = mContentModifier,
-                    onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
-                    mViewModel = nutritionViewModel,
+            if (shouldShowProfile) {
+                ProfileRoute(
+                    modifier = mContentModifier.fillMaxSize(),
+                    onBackClick = { shouldShowProfile = false },
                 )
-                AppDestinations.GOALS -> GoalsScreen(
-                    modifier = mContentModifier,
-                )
-                AppDestinations.HOME -> HomeScreen(
-                    modifier = mContentModifier,
-                )
-                AppDestinations.EXERCISES -> ExercisesScreen(
-                    modifier = mContentModifier,
-                    mCameraViewModel = mCameraViewModel,
-                )
+            } else {
+                when (currentDestination) {
+                    AppDestinations.NUTRITION -> NutritionScreen(
+                        modifier = mContentModifier,
+                        onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
+                        onProfileClick = { shouldShowProfile = true },
+                        mViewModel = nutritionViewModel,
+                    )
+                    AppDestinations.GOALS -> GoalsScreen(
+                        modifier = mContentModifier,
+                        onProfileClick = { shouldShowProfile = true },
+                    )
+                    AppDestinations.HOME -> HomeScreen(
+                        modifier = mContentModifier,
+                        onProfileClick = { shouldShowProfile = true },
+                    )
+                    AppDestinations.EXERCISES -> ExercisesScreen(
+                        modifier = mContentModifier,
+                        mCameraViewModel = mCameraViewModel,
+                        onDetailVisibilityChanged = { shouldShowBottomBarForExercises = it },
+                        onProfileClick = { shouldShowProfile = true },
+                    )
+                }
             }
         }
 

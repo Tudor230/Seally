@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
@@ -21,13 +22,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
+import com.example.seally.calendar.WorkoutPlanViewModel
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.camera.ExerciseType
 import com.example.seally.ui.components.TopHeader
+import java.time.LocalDate
 
 @Composable
 fun ExercisesScreen(
@@ -35,10 +39,25 @@ fun ExercisesScreen(
     mCameraViewModel: CameraViewModel,
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
+    onDetailVisibilityChanged: (Boolean) -> Unit = {},
+    onProfileClick: () -> Unit = {},
 ) {
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
     var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+    val mIsOnSubpage = mSelectedExerciseForChecker != null || showDumbbellPage || showCalendar
+
+    LaunchedEffect(mIsOnSubpage) {
+        onDetailVisibilityChanged(!mIsOnSubpage)
+    }
+
+    BackHandler(enabled = mIsOnSubpage) {
+        when {
+            mSelectedExerciseForChecker != null -> mSelectedExerciseForChecker = null
+            showDumbbellPage -> showDumbbellPage = false
+            showCalendar -> showCalendar = false
+        }
+    }
 
     if (mSelectedExerciseForChecker != null) {
         Box(modifier = modifier.fillMaxSize()) {
@@ -52,9 +71,13 @@ fun ExercisesScreen(
                 modifier = Modifier
                     .statusBarsPadding()
                     .padding(16.dp)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape),
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
         return
@@ -81,6 +104,8 @@ fun ExercisesScreen(
     }
 
     val context = LocalContext.current
+    val mWorkoutPlanViewModel: WorkoutPlanViewModel = viewModel()
+    val mTodayWorkout = mWorkoutPlanViewModel.mWorkoutPlans[LocalDate.now()].orEmpty()
     val musclesImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/icons/muscles.png")
         .build()
@@ -104,9 +129,53 @@ fun ExercisesScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            TopHeader()
+            TopHeader(onProfileClick = onProfileClick)
 
-            // Main content empty for now to show character, or we can add some subtle stats
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                tonalElevation = 2.dp,
+                shadowElevation = 1.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "Workout of the day",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    if (mTodayWorkout.isEmpty()) {
+                        Text(
+                            text = "You do not have anything planned for today.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(onClick = { showCalendar = true }) {
+                            Text("Plan workout")
+                        }
+                    } else {
+                        val mSummary = mTodayWorkout
+                            .take(2)
+                            .joinToString(" • ") { "${it.name.ifBlank { "Exercise" }} (${it.sets}x${it.reps})" }
+                        Text(
+                            text = mSummary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(onClick = { showCalendar = true }) {
+                            Text("Open planned workout")
+                        }
+                    }
+                }
+            }
+
             Box(modifier = Modifier.weight(1f))
         }
 
