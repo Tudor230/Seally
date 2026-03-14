@@ -5,10 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -25,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
 import com.example.seally.nutrition.NutritionScreen
+import com.example.seally.nutrition.NutritionViewModel
 import com.example.seally.ui.theme.SeallyTheme
 
 private val mBottomNavIconSize = 28.dp
@@ -83,6 +90,7 @@ class MainActivity : ComponentActivity() {
 fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     val context = LocalContext.current
+    val nutritionViewModel: NutritionViewModel = viewModel()
 
     LaunchedEffect(Unit) {
         val hasCameraPermission = ContextCompat.checkSelfPermission(
@@ -95,42 +103,73 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
         }
     }
     var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
+    val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
+    var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
-                shouldShowBottomBarForNutrition
-            if (shouldRenderBottomBar) {
-                NavigationBar {
-                    AppDestinations.entries.forEach { destination ->
-                        NavigationBarItem(
-                            selected = destination == currentDestination,
-                            onClick = { currentDestination = destination },
-                            icon = {
-                                DestinationIcon(destination)
-                            },
-                            label = { Text(destination.label) },
-                        )
+    BackHandler {
+        if (currentDestination == AppDestinations.NUTRITION && nutritionViewModel.canNavigateBackInNutrition()) {
+            nutritionViewModel.navigateBackInNutrition()
+            return@BackHandler
+        }
+
+        if (currentDestination != AppDestinations.HOME) {
+            currentDestination = AppDestinations.HOME
+            return@BackHandler
+        }
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastBackPressTimestamp <= 1000L) {
+            (context as? ComponentActivity)?.finish()
+        } else {
+            lastBackPressTimestamp = now
+            Toast
+                .makeText(context, "press back one more time to quit", Toast.LENGTH_SHORT)
+                .show()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = {
+                val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
+                    shouldShowBottomBarForNutrition
+                if (shouldRenderBottomBar) {
+                    NavigationBar {
+                        AppDestinations.entries.forEach { destination ->
+                            NavigationBarItem(
+                                selected = destination == currentDestination,
+                                onClick = { currentDestination = destination },
+                                icon = {
+                                    DestinationIcon(destination)
+                                },
+                                label = { Text(destination.label) },
+                            )
+                        }
                     }
                 }
+            },
+        ) { innerPadding ->
+            when (currentDestination) {
+                AppDestinations.NUTRITION -> NutritionScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
+                    mViewModel = nutritionViewModel,
+                )
+                AppDestinations.GOALS -> GoalsScreen(
+                    modifier = Modifier.padding(innerPadding),
+                )
+                AppDestinations.HOME -> HomeScreen(
+                    modifier = Modifier.padding(innerPadding),
+                )
+                AppDestinations.EXERCISES -> ExercisesScreen(
+                    modifier = Modifier.padding(innerPadding),
+                )
             }
-        },
-    ) { innerPadding ->
-        when (currentDestination) {
-            AppDestinations.NUTRITION -> NutritionScreen(
-                modifier = Modifier.padding(innerPadding),
-                onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
-            )
-            AppDestinations.GOALS -> GoalsScreen(
-                modifier = Modifier.padding(innerPadding),
-            )
-            AppDestinations.HOME -> HomeScreen(
-                modifier = Modifier.padding(innerPadding),
-            )
-            AppDestinations.EXERCISES -> ExercisesScreen(
-                modifier = Modifier.padding(innerPadding),
-            )
+        }
+
+        if (shouldShowSealCelebrationOverlay) {
+            FullScreenSealCelebrationOverlay()
         }
     }
 }
@@ -174,6 +213,21 @@ private fun DestinationIcon(destination: AppDestinations) {
         Icon(
             imageVector = destination.icon,
             contentDescription = destination.label,
+        )
+    }
+}
+
+@Composable
+private fun FullScreenSealCelebrationOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "🦭",
+            style = MaterialTheme.typography.displayLarge,
         )
     }
 }

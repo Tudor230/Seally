@@ -1,5 +1,6 @@
 package com.example.seally.nutrition
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,13 +37,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private enum class NutritionPage {
+enum class NutritionPage {
     Kitchen,
     Food,
     Water,
@@ -71,7 +77,7 @@ private data class ScannedQuantity(
     val summary: String,
 )
 
-private data class FoodEntry(
+data class FoodEntry(
     val name: String,
     val meal: MealType,
     val calories: Int,
@@ -83,10 +89,72 @@ private data class FoodEntry(
     val isHealthy: Boolean,
 )
 
+class NutritionViewModel : ViewModel() {
+    var mCurrentPage by mutableStateOf(NutritionPage.Kitchen)
+        private set
+
+    var mWaterConsumedMl by mutableIntStateOf(0)
+        private set
+
+    var mShouldShowSealCelebration by mutableStateOf(false)
+        private set
+
+    val mFoods = mutableStateListOf<FoodEntry>()
+
+    private var mSealCelebrationJob: Job? = null
+
+    fun openFoodPage() {
+        mCurrentPage = NutritionPage.Food
+    }
+
+    fun openWaterPage() {
+        mCurrentPage = NutritionPage.Water
+    }
+
+    fun openCameraPage() {
+        mCurrentPage = NutritionPage.Camera
+    }
+
+    fun addManualFood(foodEntry: FoodEntry) {
+        mFoods.add(foodEntry)
+        triggerSealCelebration()
+    }
+
+    fun addScannedFood(foodEntry: FoodEntry) {
+        mFoods.add(foodEntry)
+        triggerSealCelebration()
+        mCurrentPage = NutritionPage.Food
+    }
+
+    fun addWater(addedAmount: Int) {
+        mWaterConsumedMl += addedAmount
+    }
+
+    fun canNavigateBackInNutrition(): Boolean = mCurrentPage != NutritionPage.Kitchen
+
+    fun navigateBackInNutrition() {
+        mCurrentPage = when (mCurrentPage) {
+            NutritionPage.Kitchen -> NutritionPage.Kitchen
+            NutritionPage.Food, NutritionPage.Water -> NutritionPage.Kitchen
+            NutritionPage.Camera -> NutritionPage.Food
+        }
+    }
+
+    private fun triggerSealCelebration() {
+        mSealCelebrationJob?.cancel()
+        mShouldShowSealCelebration = true
+        mSealCelebrationJob = viewModelScope.launch {
+            delay(2000)
+            mShouldShowSealCelebration = false
+        }
+    }
+}
+
 @Composable
 fun NutritionScreen(
     modifier: Modifier = Modifier,
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
+    mViewModel: NutritionViewModel = viewModel(),
 ) {
     val calorieTarget = 2200
     val waterTargetMl = 2500
@@ -96,14 +164,9 @@ fun NutritionScreen(
     val sugarTarget = 50
     val fiberTarget = 30
 
-    var currentPage by rememberSaveable { mutableStateOf(NutritionPage.Kitchen) }
-    var waterConsumedMl by rememberSaveable { mutableIntStateOf(0) }
-    var sealCelebrationTick by rememberSaveable { mutableIntStateOf(0) }
-    var shouldShowSealCelebration by rememberSaveable { mutableStateOf(false) }
-
-    val foods = remember {
-        mutableStateListOf<FoodEntry>()
-    }
+    val currentPage = mViewModel.mCurrentPage
+    val waterConsumedMl = mViewModel.mWaterConsumedMl
+    val foods = mViewModel.mFoods
 
     val caloriesConsumed = foods.sumOf { it.calories }
     val proteinConsumed = foods.sumOf { it.protein }
@@ -112,14 +175,10 @@ fun NutritionScreen(
     val sugarsConsumed = foods.sumOf { it.sugars }
     val fibersConsumed = foods.sumOf { it.fibers }
 
-    LaunchedEffect(sealCelebrationTick) {
-        if (sealCelebrationTick == 0) {
-            return@LaunchedEffect
-        }
-        shouldShowSealCelebration = true
-        delay(2000)
-        shouldShowSealCelebration = false
-    }
+    BackHandler(
+        enabled = mViewModel.canNavigateBackInNutrition(),
+        onBack = mViewModel::navigateBackInNutrition,
+    )
 
     DisposableEffect(currentPage) {
         onDetailVisibilityChanged(currentPage == NutritionPage.Kitchen)
@@ -144,8 +203,8 @@ fun NutritionScreen(
                 calorieTarget = calorieTarget,
                 waterConsumedMl = waterConsumedMl,
                 waterTargetMl = waterTargetMl,
-                onOpenFood = { currentPage = NutritionPage.Food },
-                onOpenWater = { currentPage = NutritionPage.Water },
+                onOpenFood = mViewModel::openFoodPage,
+                onOpenWater = mViewModel::openWaterPage,
             )
             NutritionPage.Food -> FoodTrackingPage(
                 foods = foods,
@@ -161,32 +220,20 @@ fun NutritionScreen(
                 sugarTarget = sugarTarget,
                 fibersConsumed = fibersConsumed,
                 fiberTarget = fiberTarget,
-                onBack = { currentPage = NutritionPage.Kitchen },
-                onOpenCamera = {
-                    currentPage = NutritionPage.Camera
-                },
-                onManualAddFood = { addedFood ->
-                    foods.add(addedFood)
-                    sealCelebrationTick++
-                },
+                onBack = mViewModel::navigateBackInNutrition,
+                onOpenCamera = mViewModel::openCameraPage,
+                onManualAddFood = mViewModel::addManualFood,
             )
             NutritionPage.Water -> WaterTrackingPage(
                 waterConsumedMl = waterConsumedMl,
                 waterTargetMl = waterTargetMl,
-                onBack = { currentPage = NutritionPage.Kitchen },
-                onAddWater = { addedAmount -> waterConsumedMl += addedAmount },
+                onBack = mViewModel::navigateBackInNutrition,
+                onAddWater = mViewModel::addWater,
             )
             NutritionPage.Camera -> CameraTrackingPage(
-                onBack = { currentPage = NutritionPage.Food },
-                onAddFoodFromScan = { scannedFood ->
-                    foods.add(scannedFood)
-                    sealCelebrationTick++
-                    currentPage = NutritionPage.Food
-                },
+                onBack = mViewModel::navigateBackInNutrition,
+                onAddFoodFromScan = mViewModel::addScannedFood,
             )
-        }
-        if (shouldShowSealCelebration) {
-            SealCelebrationOverlay()
         }
     }
 }
@@ -1419,20 +1466,5 @@ private fun formatFloatForUi(value: Float): String {
         rounded.roundToInt().toString()
     } else {
         rounded.toString()
-    }
-}
-
-@Composable
-private fun SealCelebrationOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "🦭",
-            style = MaterialTheme.typography.displayLarge,
-        )
     }
 }
