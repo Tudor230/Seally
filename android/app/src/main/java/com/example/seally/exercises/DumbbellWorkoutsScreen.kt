@@ -29,19 +29,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.seally.camera.ExerciseType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DumbbellWorkoutsScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
+    onExerciseSelected: (ExerciseType) -> Unit = {},
 ) {
-    var selectedPlanIndex by rememberSaveable { mutableIntStateOf(-1) }
+    var mSelectedExerciseIndex by rememberSaveable { mutableIntStateOf(-1) }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Workouts", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Form Correctors", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -58,7 +60,7 @@ fun DumbbellWorkoutsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Pick a workout to get started.",
+                text = "Pick an exercise to start form checking.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -69,19 +71,25 @@ fun DumbbellWorkoutsScreen(
             ) {
                 WorkoutPlanCard(
                     modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = selectedPlanIndex == 0,
-                    onClick = { selectedPlanIndex = 0 },
-                    title = "Full Body Starter",
-                    details = "Goblet squat, dumbbell row, shoulder press",
-                    duration = "20 min",
+                    isSelected = mSelectedExerciseIndex == 0,
+                    onClick = {
+                        mSelectedExerciseIndex = 0
+                        onExerciseSelected(ExerciseType.SQUAT)
+                    },
+                    title = "Squat",
+                    details = "Side-view squat depth and form checker",
+                    duration = "Form check",
                 )
                 WorkoutPlanCard(
                     modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = selectedPlanIndex == 1,
-                    onClick = { selectedPlanIndex = 1 },
-                    title = "Upper Body Focus",
-                    details = "Chest press, curls, triceps extension",
-                    duration = "25 min",
+                    isSelected = mSelectedExerciseIndex == 1,
+                    onClick = {
+                        mSelectedExerciseIndex = 1
+                        onExerciseSelected(ExerciseType.PLANK)
+                    },
+                    title = "Plank",
+                    details = "Core alignment and hold feedback checker",
+                    duration = "Form check",
                 )
             }
             Row(
@@ -90,19 +98,14 @@ fun DumbbellWorkoutsScreen(
             ) {
                 WorkoutPlanCard(
                     modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = selectedPlanIndex == 2,
-                    onClick = { selectedPlanIndex = 2 },
-                    title = "Lower Body Builder",
-                    details = "Romanian deadlift, lunges, calf raises",
-                    duration = "25 min",
-                )
-                WorkoutPlanCard(
-                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = selectedPlanIndex == 3,
-                    onClick = { selectedPlanIndex = 3 },
-                    title = "Core & Conditioning",
-                    details = "Russian twists, farmer carry, plank rows",
-                    duration = "18 min",
+                    isSelected = mSelectedExerciseIndex == 2,
+                    onClick = {
+                        mSelectedExerciseIndex = 2
+                        onExerciseSelected(ExerciseType.PULLUP)
+                    },
+                    title = "Pull-up",
+                    details = "Dead hang to top-position feedback checker",
+                    duration = "Form check",
                 )
             }
         }

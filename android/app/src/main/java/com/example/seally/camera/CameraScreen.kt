@@ -24,11 +24,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +77,7 @@ private val POSE_CONNECTIONS = listOf(
 fun CameraScreen(
     modifier: Modifier = Modifier,
     mViewModel: CameraViewModel = viewModel(),
+    mShowExerciseGuideOnEntry: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -87,7 +86,7 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mLastShownGuideExercise by remember { mutableStateOf<ExerciseType?>(null) }
+    var mHasShownEntryGuide by remember { mutableStateOf(false) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -146,19 +145,18 @@ fun CameraScreen(
         uiState.mHasCompletedInitialPermissionCheck,
         uiState.mHasCameraPermission,
         uiState.mIsStartupCameraLoading,
-        uiState.mSelectedExercise,
+        mShowExerciseGuideOnEntry,
     ) {
         if (
             !uiState.mHasCompletedInitialPermissionCheck ||
             !uiState.mHasCameraPermission ||
             uiState.mIsStartupCameraLoading
         ) {
-            mLastShownGuideExercise = null
             return@LaunchedEffect
         }
-        if (mLastShownGuideExercise == uiState.mSelectedExercise) return@LaunchedEffect
+        if (!mShowExerciseGuideOnEntry || mHasShownEntryGuide) return@LaunchedEffect
         context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
-        mLastShownGuideExercise = uiState.mSelectedExercise
+        mHasShownEntryGuide = true
     }
 
     val mMessageToAnnounce = uiState.mErrorMessage
@@ -260,19 +258,9 @@ fun CameraScreen(
 
         Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.TopEnd)
                 .padding(12.dp),
         ) {
-            Button(onClick = { mViewModel.toggleExerciseMode() }) {
-                Text(
-                    when (uiState.mSelectedExercise) {
-                        ExerciseType.SQUAT -> "Switch to Plank"
-                        ExerciseType.PLANK -> "Switch to Pullup"
-                        ExerciseType.PULLUP -> "Switch to Squat"
-                    },
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
                 mViewModel.onLensSwitchStarted()
                 mSwitchSnapshot = mPreviewView?.bitmap?.asImageBitmap()
