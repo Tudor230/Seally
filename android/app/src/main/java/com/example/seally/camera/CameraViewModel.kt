@@ -55,7 +55,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mHasAttemptedWarmup: Boolean = false
     private val mLiveKitPublisher = LiveKitPublisher(getApplication())
     private var mIsLiveKitConnecting: Boolean = false
-    private var mHasShownLiveKitConfigError: Boolean = false
     private var mLandmarkSequence: Long = 0L
     private var mLastLandmarkSentAtMs: Long = 0L
     private var mFrameCounter: Long = 0L
@@ -283,14 +282,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun ensureLiveKitConnected() {
         if (mLiveKitUrl.isBlank() || mLiveKitToken.isBlank()) {
-            if (!mHasShownLiveKitConfigError) {
-                mUiState.update {
-                    it.copy(
-                        mErrorMessage = "LiveKit config missing: set LIVEKIT_URL and LIVEKIT_TOKEN in gradle.properties.",
-                    )
-                }
-                mHasShownLiveKitConfigError = true
-            }
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (config missing)") }
             return
         }
 
@@ -306,7 +298,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     Log.e(mTag, "LiveKit connection failed", error)
                     mUiState.update {
                         it.copy(
-                            mErrorMessage = "LiveKit connection failed: ${error.message ?: "unknown error"}",
                             mLiveKitStatus = "LiveKit failed: ${error.message ?: "unknown error"}",
                         )
                     }
