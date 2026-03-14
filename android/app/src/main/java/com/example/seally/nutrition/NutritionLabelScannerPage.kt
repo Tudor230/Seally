@@ -244,7 +244,9 @@ fun NutritionLabelScannerPage(
                                     }
 
                                     mStatusMessage = "Reading nutrition label..."
-                                    val ocrResult = mOcrEngine.detectText(bitmap)
+                                    val ocrResult = withContext(Dispatchers.Default) {
+                                        mOcrEngine.detectText(bitmap)
+                                    }
                                     ocrResult.fold(
                                         onSuccess = { detectedText ->
                                             val parsedResult = NutritionLabelParser.parse(detectedText)
