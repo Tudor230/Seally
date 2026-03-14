@@ -7,7 +7,7 @@ fun String.toGradleStringLiteral(): String = "\"${replace("\\", "\\\\").replace(
 
 val livekitUrl = (project.findProperty("LIVEKIT_URL") as String?) ?: ""
 val livekitToken = (project.findProperty("LIVEKIT_TOKEN") as String?) ?: ""
-val livekitLandmarkTopic = (project.findProperty("LIVEKIT_LANDMARK_TOPIC") as String?) ?: "pose.normalized.v1"
+val livekitLandmarkTopic = (project.findProperty("LIVEKIT_LANDMARK_TOPIC") as String?) ?: "pose.binary.v2"
 
 android {
     namespace = "com.example.seally"

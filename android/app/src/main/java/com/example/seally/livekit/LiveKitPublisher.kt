@@ -2,21 +2,20 @@ package com.example.seally.livekit
 
 import android.util.Log
 import android.content.Context
-import androidx.camera.core.ImageProxy
+import android.os.SystemClock
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.DataPublishReliability
-import io.livekit.android.room.track.LocalVideoTrack
 
 class LiveKitPublisher(context: Context) {
     private val mTag = "LiveKitPublisher"
     private val mRoom: Room = LiveKit.create(context.applicationContext)
-    private val mCapturer = CameraXFrameCapturer()
-    private var mLocalVideoTrack: LocalVideoTrack? = null
     private var mIsConnected: Boolean = false
     private var mIsVideoPublished: Boolean = false
-    private var mFramesSubmitted: Long = 0L
     private var mLandmarkPacketsSent: Long = 0L
+    private var mLandmarkPacketsPerSecond: Int = 0
+    private var mSendPpsWindowStartMs: Long = 0L
+    private var mSendPpsWindowPacketCount: Int = 0
     private var mLastError: String? = null
 
     suspend fun connect(url: String, token: String): Result<Any> {
@@ -25,70 +24,82 @@ class LiveKitPublisher(context: Context) {
         return runCatching {
             Log.d(mTag, "Connecting to LiveKit room...")
             mRoom.connect(url = url, token = token)
-            Log.d(mTag, "Connected to LiveKit room, creating local track...")
-
-            val localTrack = mRoom.localParticipant.createVideoTrack(
-                name = "camera",
-                capturer = mCapturer,
-            )
-            localTrack.start()
-            localTrack.startCapture()
-            val didPublish = mRoom.localParticipant.publishVideoTrack(localTrack)
-            if (!didPublish) {
-                localTrack.stopCapture()
-                localTrack.stop()
-                localTrack.dispose()
-                mLastError = "publishVideoTrack returned false"
-                Log.e(mTag, "Failed to publish camera track.")
-                error("LiveKit camera track could not be published")
-            }
-            mLocalVideoTrack = localTrack
+            Log.d(mTag, "Connected to LiveKit room (landmarks-only mode).")
             mIsConnected = true
-            mIsVideoPublished = true
+            mIsVideoPublished = false
             mLastError = null
-            Log.d(mTag, "Local camera track published successfully.")
         }.onFailure {
             mLastError = it.message ?: "unknown connect/publish failure"
             Log.e(mTag, "LiveKit connect/publish failed: ${mLastError}", it)
         }
     }
 
-    fun pushVideoFrame(imageProxy: ImageProxy) {
-        if (!mIsConnected) return
-        mCapturer.pushImageProxy(imageProxy)
-        mFramesSubmitted += 1
-    }
-
     suspend fun publishLandmarks(payload: ByteArray, topic: String): Result<Unit> {
         if (!mIsConnected) return Result.failure(IllegalStateException("LiveKit room is not connected"))
-        return mRoom.localParticipant.publishData(
+        val lossyResult = mRoom.localParticipant.publishData(
             data = payload,
             reliability = DataPublishReliability.LOSSY,
             topic = topic,
-        ).onSuccess {
+        )
+
+        if (lossyResult.isSuccess) {
             mLandmarkPacketsSent += 1
-        }.onFailure {
-            mLastError = it.message ?: "landmark publish failed"
-            Log.e(mTag, "Failed to publish landmarks: ${mLastError}", it)
+            updateSendPps()
+            return Result.success(Unit)
         }
+
+        val lossyError = lossyResult.exceptionOrNull()
+        val shouldFallbackToReliable = lossyError?.message
+            ?.contains("channel not established", ignoreCase = true) == true
+        if (shouldFallbackToReliable) {
+            return mRoom.localParticipant.publishData(
+                data = payload,
+                reliability = DataPublishReliability.RELIABLE,
+                topic = topic,
+            ).onSuccess {
+                mLandmarkPacketsSent += 1
+                updateSendPps()
+                mLastError = null
+            }.onFailure {
+                mLastError = it.message ?: "landmark reliable publish failed"
+                Log.e(mTag, "Reliable landmark publish fallback failed: ${mLastError}", it)
+            }
+        }
+
+        mLastError = lossyError?.message ?: "landmark publish failed"
+        if (lossyError != null) {
+            Log.e(mTag, "Failed to publish landmarks: ${mLastError}", lossyError)
+        }
+        return Result.failure(lossyError ?: IllegalStateException("landmark publish failed"))
     }
 
     fun disconnect() {
         if (!mIsConnected) return
-        mLocalVideoTrack?.let {
-            it.stopCapture()
-            it.stop()
-            it.dispose()
-        }
-        mLocalVideoTrack = null
         mRoom.disconnect()
         mIsConnected = false
         mIsVideoPublished = false
+        mLandmarkPacketsPerSecond = 0
+        mSendPpsWindowStartMs = 0L
+        mSendPpsWindowPacketCount = 0
         Log.d(mTag, "Disconnected from LiveKit room.")
     }
 
     fun getDebugStatus(): String {
         val errorPart = mLastError?.let { " error=$it" } ?: ""
-        return "connected=$mIsConnected videoPublished=$mIsVideoPublished frames=$mFramesSubmitted landmarkPackets=$mLandmarkPacketsSent$errorPart"
+        return "connected=$mIsConnected videoPublished=$mIsVideoPublished landmarkPackets=$mLandmarkPacketsSent landmarkPps=$mLandmarkPacketsPerSecond$errorPart"
+    }
+
+    private fun updateSendPps() {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (mSendPpsWindowStartMs == 0L) {
+            mSendPpsWindowStartMs = nowMs
+        }
+        mSendPpsWindowPacketCount += 1
+        val elapsedMs = nowMs - mSendPpsWindowStartMs
+        if (elapsedMs < 1_000L) return
+
+        mLandmarkPacketsPerSecond = ((mSendPpsWindowPacketCount * 1_000L) / elapsedMs).toInt()
+        mSendPpsWindowStartMs = nowMs
+        mSendPpsWindowPacketCount = 0
     }
 }

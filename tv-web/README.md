@@ -1,6 +1,6 @@
 # Seally TV Web Receiver
 
-This web app connects to a LiveKit room, subscribes to remote video, and reads normalized landmark packets from topic `pose.normalized.v1` (configurable).
+This web app connects to a LiveKit room and renders a body skeleton on canvas from compact binary landmark packets on topic `pose.binary.v2` (configurable). Remote video subscription is disabled in this mode.
 
 ## Environment
 
@@ -9,8 +9,8 @@ Create `tv-web/.env`:
 ```bash
 VITE_LIVEKIT_URL=wss://your-project.livekit.cloud
 VITE_LIVEKIT_TOKEN=your-web-viewer-token
-VITE_LIVEKIT_LANDMARK_TOPIC=pose.normalized.v1
-VITE_LIVEKIT_FORCE_RELAY=true
+VITE_LIVEKIT_LANDMARK_TOPIC=pose.binary.v2
+VITE_LIVEKIT_FORCE_RELAY=false
 ```
 
 ## Run
