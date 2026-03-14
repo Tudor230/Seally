@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.Restaurant
@@ -130,6 +132,14 @@ class NutritionViewModel : ViewModel() {
         mWaterConsumedMl += addedAmount
     }
 
+    fun removeFood(foodEntry: FoodEntry) {
+        mFoods.remove(foodEntry)
+    }
+
+    fun removeWater(removedAmount: Int) {
+        mWaterConsumedMl = (mWaterConsumedMl - removedAmount).coerceAtLeast(0)
+    }
+
     fun canNavigateBackInNutrition(): Boolean = mCurrentPage != NutritionPage.Kitchen
 
     fun navigateBackInNutrition() {
@@ -175,6 +185,8 @@ fun NutritionScreen(
     val sugarsConsumed = foods.sumOf { it.sugars }
     val fibersConsumed = foods.sumOf { it.fibers }
 
+    var foodPendingDeletion by remember { mutableStateOf<FoodEntry?>(null) }
+
     BackHandler(
         enabled = mViewModel.canNavigateBackInNutrition(),
         onBack = mViewModel::navigateBackInNutrition,
@@ -183,6 +195,31 @@ fun NutritionScreen(
     DisposableEffect(currentPage) {
         onDetailVisibilityChanged(currentPage == NutritionPage.Kitchen)
         onDispose {}
+    }
+
+    if (foodPendingDeletion != null) {
+        AlertDialog(
+            onDismissRequest = { foodPendingDeletion = null },
+            title = { Text("Remove Food?") },
+            text = { Text("Are you sure you want to remove '${foodPendingDeletion?.name}' from your logs?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        foodPendingDeletion?.let { mViewModel.removeFood(it) }
+                        foodPendingDeletion = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { foodPendingDeletion = null }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
     }
 
     Box(
@@ -223,12 +260,14 @@ fun NutritionScreen(
                 onBack = mViewModel::navigateBackInNutrition,
                 onOpenCamera = mViewModel::openCameraPage,
                 onManualAddFood = mViewModel::addManualFood,
+                onRemoveFood = { foodPendingDeletion = it },
             )
             NutritionPage.Water -> WaterTrackingPage(
                 waterConsumedMl = waterConsumedMl,
                 waterTargetMl = waterTargetMl,
                 onBack = mViewModel::navigateBackInNutrition,
                 onAddWater = mViewModel::addWater,
+                onRemoveWater = mViewModel::removeWater,
             )
             NutritionPage.Camera -> CameraTrackingPage(
                 onBack = mViewModel::navigateBackInNutrition,
@@ -411,6 +450,7 @@ private fun FoodTrackingPage(
     onBack: () -> Unit,
     onOpenCamera: () -> Unit,
     onManualAddFood: (FoodEntry) -> Unit,
+    onRemoveFood: (FoodEntry) -> Unit,
 ) {
     var shouldShowAddFoodSheet by rememberSaveable { mutableStateOf(false) }
     var pendingMealType by rememberSaveable { mutableStateOf<MealType?>(null) }
@@ -469,10 +509,11 @@ private fun FoodTrackingPage(
                     MealCard(
                         mealType = mealType,
                         mealFoods = foods.filter { it.meal == mealType },
+                        onRemoveFood = onRemoveFood,
                         onAddClick = {
                             pendingMealType = mealType
                             shouldShowAddFoodSheet = true
-                        }
+                        },
                     )
                 }
             }
@@ -576,9 +617,13 @@ private fun MacroOverviewPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MacroMiniStat("Protein", protein, proteinTarget, Color(0xFFE91E63))
-                MacroMiniStat("Carbs", carbs, carbsTarget, Color(0xFF4CAF50))
-                MacroMiniStat("Fats", fats, fatTarget, Color(0xFFFF9800))
+                val proteinColor = if (isSystemInDarkTheme()) Color(0xFFFF80AB) else Color(0xFFE91E63)
+                val carbsColor = if (isSystemInDarkTheme()) Color(0xFF81C784) else Color(0xFF4CAF50)
+                val fatsColor = if (isSystemInDarkTheme()) Color(0xFFFFB74D) else Color(0xFFFF9800)
+                
+                MacroMiniStat("Protein", protein, proteinTarget, proteinColor)
+                MacroMiniStat("Carbs", carbs, carbsTarget, carbsColor)
+                MacroMiniStat("Fats", fats, fatTarget, fatsColor)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -639,7 +684,8 @@ private fun SecondaryMacroStat(label: String, value: Int, target: Int, modifier:
 private fun MealCard(
     mealType: MealType,
     mealFoods: List<FoodEntry>,
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
+    onRemoveFood: (FoodEntry) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -708,12 +754,22 @@ private fun MealCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "${food.calories} kcal",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${food.calories} kcal",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            IconButton(onClick = { onRemoveFood(food) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -727,6 +783,7 @@ private fun WaterTrackingPage(
     waterTargetMl: Int,
     onBack: () -> Unit,
     onAddWater: (Int) -> Unit,
+    onRemoveWater: (Int) -> Unit,
 ) {
     val context = LocalContext.current
     val waterSvgRequest = ImageRequest.Builder(context)
@@ -738,11 +795,12 @@ private fun WaterTrackingPage(
     var selectedQuantity by rememberSaveable { mutableIntStateOf(250) }
     var showCustomDialog by remember { mutableStateOf(false) }
     var customAmountText by remember { mutableStateOf("") }
+    var isRemoveMode by rememberSaveable { mutableStateOf(false) }
 
     if (showCustomDialog) {
         AlertDialog(
             onDismissRequest = { showCustomDialog = false },
-            title = { Text("Custom Amount") },
+            title = { Text(if (isRemoveMode) "Remove Custom Amount" else "Add Custom Amount") },
             text = {
                 OutlinedTextField(
                     value = customAmountText,
@@ -761,14 +819,15 @@ private fun WaterTrackingPage(
                     onClick = {
                         val amount = customAmountText.toIntOrNull() ?: 0
                         if (amount > 0) {
-                            onAddWater(amount)
+                            if (isRemoveMode) onRemoveWater(amount) else onAddWater(amount)
                             showCustomDialog = false
                             customAmountText = ""
                         }
                     },
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = if (isRemoveMode) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors()
                 ) {
-                    Text("Add")
+                    Text(if (isRemoveMode) "Remove" else "Add")
                 }
             },
             dismissButton = {
@@ -789,19 +848,38 @@ private fun WaterTrackingPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                    )
+                }
+                Text(
+                    text = "Water Intake",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                 )
             }
-            Text(
-                text = "Water Intake",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            
+            // Mode Toggle
+            Surface(
+                onClick = { isRemoveMode = !isRemoveMode },
+                shape = RoundedCornerShape(12.dp),
+                color = if (isRemoveMode) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.height(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Text(
+                        text = if (isRemoveMode) "Remove Mode" else "Add Mode",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isRemoveMode) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -815,7 +893,7 @@ private fun WaterTrackingPage(
             Surface(
                 modifier = Modifier.size(260.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                color = if (isRemoveMode) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
             ) {}
             
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -830,24 +908,24 @@ private fun WaterTrackingPage(
                     text = "$waterConsumedMl / $waterTargetMl ml",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "Daily Goal",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    color = (if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.7f)
                 )
             }
 
             CircularProgressIndicator(
                 progress = { (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f) },
                 modifier = Modifier.size(280.dp),
-                color = MaterialTheme.colorScheme.primary,
+                color = if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 strokeWidth = 12.dp,
                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                trackColor = (if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f)
             )
         }
 
@@ -879,8 +957,12 @@ private fun WaterTrackingPage(
                             onClick = { selectedQuantity = quantity },
                             modifier = Modifier.weight(1f).height(64.dp),
                             shape = RoundedCornerShape(20.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isSelected) {
+                                if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            } else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = if (isSelected) {
+                                if (isRemoveMode) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                            } else MaterialTheme.colorScheme.onSurfaceVariant
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
@@ -916,14 +998,14 @@ private fun WaterTrackingPage(
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
-                    onClick = { onAddWater(selectedQuantity) },
+                    onClick = { if (isRemoveMode) onRemoveWater(selectedQuantity) else onAddWater(selectedQuantity) },
                     modifier = Modifier.fillMaxWidth().height(60.dp),
                     shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    colors = if (isRemoveMode) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.LocalDrink, contentDescription = null)
+                    Icon(if (isRemoveMode) Icons.Default.Close else Icons.Default.LocalDrink, contentDescription = null)
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("Add Water", style = MaterialTheme.typography.titleMedium)
+                    Text(if (isRemoveMode) "Remove Water" else "Add Water", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
