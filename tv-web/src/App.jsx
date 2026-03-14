@@ -23,16 +23,14 @@ const POSE_CONNECTIONS = [
   [28, 30], [30, 32],
 ]
 
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || ''
+
 function App() {
-  const [mUrl, setMUrl] = useState(import.meta.env.VITE_LIVEKIT_URL || '')
   const [mRoomCode, setMRoomCode] = useState('')
   const [mToken, setMToken] = useState('')
   const [mStatus, setMStatus] = useState('Disconnected')
   const [mError, setMError] = useState('')
   const [mDebug, setMDebug] = useState('No remote participants.')
-  const [mLandmarkSeq, setMLandmarkSeq] = useState(null)
-  const [mLandmarkCount, setMLandmarkCount] = useState(0)
-  const [mReceivedPps, setMReceivedPps] = useState(0)
   const [mSkeletonFrame, setMSkeletonFrame] = useState(null)
   const [mRoom, setMRoom] = useState(null)
   const mCanvasRef = useRef(null)
@@ -144,9 +142,10 @@ function App() {
     setMDebug(lines.length ? `Participants: ${lines.join(', ')}` : 'No remote participants.')
   }
 
-  const handleConnect = async () => {
-    if (!mUrl.trim() || !mToken.trim()) {
-      setMError('Missing URL/token.')
+  const handleConnect = async (token) => {
+    const tokenToUse = token || mToken
+    if (!tokenToUse.trim()) {
+      setMError('Missing token.')
       return
     }
 
@@ -174,14 +173,10 @@ function App() {
         mRxWindowPacketCountRef.current += 1
         const elapsedMs = nowMs - mRxWindowStartMsRef.current
         if (elapsedMs >= 1000) {
-          const packetsPerSecond = Math.round((mRxWindowPacketCountRef.current * 1000) / elapsedMs)
-          setMReceivedPps(packetsPerSecond)
           mRxWindowStartMsRef.current = nowMs
           mRxWindowPacketCountRef.current = 0
         }
 
-        setMLandmarkSeq(data.sequence)
-        setMLandmarkCount(data.landmarkCount)
         setMSkeletonFrame(data)
         setMError('')
         setMStatus(`Connected (landmarks from ${participant?.identity || 'unknown'})`)
@@ -193,16 +188,14 @@ function App() {
     room.on(RoomEvent.Disconnected, () => {
       setMStatus('Disconnected')
       setMDebug('No remote participants.')
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMSkeletonFrame(null)
     })
 
     try {
-      await room.connect(mUrl.trim(), mToken.trim())
+      await room.connect(LIVEKIT_URL, tokenToUse.trim())
       setMRoom(room)
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMStatus('Connected (waiting for landmarks)')
@@ -221,6 +214,8 @@ function App() {
       setMRoomCode(code)
       setMToken(token)
       setMError('')
+      // Auto-connect after generating token
+      await handleConnect(token)
     } catch (error) {
       setMError(`Failed to generate room code: ${error.message}`)
     }
@@ -231,7 +226,6 @@ function App() {
     setMRoom(null)
     setMStatus('Disconnected')
     setMDebug('No remote participants.')
-    setMReceivedPps(0)
     mRxWindowStartMsRef.current = 0
     mRxWindowPacketCountRef.current = 0
     setMSkeletonFrame(null)
@@ -242,12 +236,8 @@ function App() {
       <h1>Seally LiveKit Skeleton Receiver</h1>
 
       <section className="panel">
-        <label>
-          LiveKit URL
-          <input value={mUrl} onChange={(event) => setMUrl(event.target.value)} />
-        </label>
         <div className="actions">
-          <button disabled={!!mRoomCode} onClick={handleGenerateRoomCode}>
+          <button disabled={!!mRoom} onClick={handleGenerateRoomCode}>
             Generate Room Code
           </button>
         </div>
@@ -257,22 +247,10 @@ function App() {
             <p className="hint">Enter this code on the mobile app to connect</p>
           </div>
         )}
-        {mToken && (
-          <label>
-            Token (auto-generated)
-            <textarea value={mToken} readOnly />
-          </label>
-        )}
-        <div className="actions">
-          <button disabled={!!mRoom} onClick={handleConnect}>Connect</button>
-          <button disabled={!mRoom} onClick={handleDisconnect}>Disconnect</button>
-        </div>
       </section>
 
       <section className="status">
         <p><strong>Status:</strong> {mStatus}</p>
-        <p><strong>Topic:</strong> {LANDMARK_TOPIC}</p>
-        <p><strong>Landmarks:</strong> seq={mLandmarkSeq ?? '-'} count={mLandmarkCount} rxPps={mReceivedPps}</p>
         <p className="debug">{mDebug}</p>
         {mError && <p className="error">{mError}</p>}
       </section>
