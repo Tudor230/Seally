@@ -14,6 +14,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,8 +39,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -131,6 +135,7 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
             bottomBar = {
                 val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
                     shouldShowBottomBarForNutrition
@@ -150,20 +155,27 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                 }
             },
         ) { innerPadding ->
+            val mLayoutDirection = LocalLayoutDirection.current
+            val mContentModifier = Modifier.padding(
+                start = innerPadding.calculateStartPadding(mLayoutDirection),
+                end = innerPadding.calculateEndPadding(mLayoutDirection),
+                bottom = innerPadding.calculateBottomPadding(),
+            )
+
             when (currentDestination) {
                 AppDestinations.NUTRITION -> NutritionScreen(
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = mContentModifier,
                     onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
                     mViewModel = nutritionViewModel,
                 )
                 AppDestinations.GOALS -> GoalsScreen(
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = mContentModifier,
                 )
                 AppDestinations.HOME -> HomeScreen(
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = mContentModifier,
                 )
                 AppDestinations.EXERCISES -> ExercisesScreen(
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = mContentModifier,
                     mCameraViewModel = mCameraViewModel,
                 )
             }
@@ -237,8 +249,8 @@ enum class AppDestinations(
     val label: String,
     val icon: ImageVector,
 ) {
-    NUTRITION("Nutrition", Icons.Default.Favorite),
-    GOALS("Goals", Icons.Default.Home),
     HOME("Home", Icons.Default.Home),
     EXERCISES("Exercises", Icons.Default.Home),
+    NUTRITION("Nutrition", Icons.Default.Favorite),
+    GOALS("Goals", Icons.Default.Home),
 }

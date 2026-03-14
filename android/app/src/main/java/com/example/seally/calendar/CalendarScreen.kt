@@ -13,20 +13,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -45,7 +40,7 @@ private data class ExerciseEntry(
     val reps: Int,
 )
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier,
@@ -67,21 +62,48 @@ fun CalendarScreen(
         startMonth.plusMonths((pagerState.currentPage - startPage).toLong())
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        monthTitle(currentMonth),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+        ) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                actions = {
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = monthTitle(currentMonth),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row {
                     IconButton(onClick = {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
                     }) {
@@ -93,85 +115,135 @@ fun CalendarScreen(
                         Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next")
                     }
                 }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-            DaysOfWeekHeader()
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) { page ->
-                val month = startMonth.plusMonths((page - startPage).toLong())
-                MonthGrid(
-                    month = month,
-                    selectedDate = selectedDate,
-                    today = today,
-                    workoutDates = workoutByDate.keys,
-                    onDayClick = { clicked ->
-                        selectedDate = clicked
-                        draftExercises.clear()
-                        workoutByDate[clicked]?.let { existing -> draftExercises.addAll(existing) }
-                        if (draftExercises.isEmpty()) {
-                            draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
-                        }
-                        isEntryDialogOpen = true
-                    },
-                )
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                thickness = DividerDefaults.Thickness,
-                color = DividerDefaults.color
-            )
+            // Calendar Card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                shadowElevation = 2.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    DaysOfWeekHeader()
+                    
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) { page ->
+                        val month = startMonth.plusMonths((page - startPage).toLong())
+                        MonthGrid(
+                            month = month,
+                            selectedDate = selectedDate,
+                            today = today,
+                            workoutDates = workoutByDate.keys,
+                            onDayClick = { clicked ->
+                                selectedDate = clicked
+                                draftExercises.clear()
+                                workoutByDate[clicked]?.let { existing -> draftExercises.addAll(existing) }
+                                if (draftExercises.isEmpty()) {
+                                    draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
+                                }
+                                isEntryDialogOpen = true
+                            },
+                        )
+                    }
+                }
+            }
 
-            // Preview Section
-            Text(
-                text = "Plan for ${selectedDate.dayOfMonth} ${selectedDate.month.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Details Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Activity for ${selectedDate.dayOfMonth} ${selectedDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                TextButton(onClick = {
+                    draftExercises.clear()
+                    workoutByDate[selectedDate]?.let { existing -> draftExercises.addAll(existing) }
+                    if (draftExercises.isEmpty()) {
+                        draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
+                    }
+                    isEntryDialogOpen = true
+                }) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit Plan", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             val dayWorkouts = workoutByDate[selectedDate]
             if (dayWorkouts.isNullOrEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No exercises planned",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            "No training scheduled for today",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     dayWorkouts.forEach { entry ->
-                        ListItem(
-                            headlineContent = { Text(entry.name.ifBlank { "Unnamed Exercise" }) },
-                            supportingContent = { Text("${entry.sets} sets × ${entry.reps} reps") },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            leadingContent = {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Surface(
-                                    modifier = Modifier.size(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {}
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.FitnessCenter, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        text = entry.name.ifBlank { "Unnamed Exercise" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${entry.sets} sets × ${entry.reps} reps",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(100.dp))
                 }
             }
         }
@@ -196,14 +268,17 @@ fun CalendarScreen(
 
 @Composable
 private fun DaysOfWeekHeader() {
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        DayOfWeek.values().forEach { dow ->
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        listOf(
+            DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY
+        ).forEach { dow ->
             Text(
-                text = dow.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
+                text = dow.getDisplayName(TextStyle.SHORT, Locale.getDefault()).first().toString(),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
                 ),
                 modifier = Modifier.weight(1f),
             )
@@ -262,12 +337,12 @@ private fun DayCell(
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .padding(4.dp)
+            .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
-                    isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isToday -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     else -> Color.Transparent
                 }
             )
@@ -278,21 +353,21 @@ private fun DayCell(
             Text(
                 text = date.dayOfMonth.toString(),
                 color = when {
-                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> MaterialTheme.colorScheme.onBackground
+                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                    isToday -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurface
                 },
-                style = MaterialTheme.typography.bodyLarge.copy(
+                style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal
                 ),
             )
-            // Workout Indicator Dot
             if (hasWorkout) {
                 Box(
                     modifier = Modifier
                         .padding(top = 2.dp)
-                        .size(6.dp)
+                        .size(4.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary),
+                        .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary),
                 )
             }
         }
@@ -311,8 +386,9 @@ private fun WorkoutListDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Edit Plan: ${date.dayOfMonth} ${date.month.name.lowercase()}",
-                style = MaterialTheme.typography.headlineSmall
+                text = "Training Plan",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
@@ -321,22 +397,29 @@ private fun WorkoutListDialog(
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Text(
+                    text = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
                 draftExercises.forEachIndexed { index, entry ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedTextField(
                                     value = entry.name,
                                     onValueChange = { draftExercises[index] = entry.copy(name = it) },
-                                    label = { Text("Exercise") },
+                                    label = { Text("Exercise Name") },
                                     modifier = Modifier.weight(1f),
-                                    singleLine = true
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                                 IconButton(onClick = {
                                     if (draftExercises.size > 1) draftExercises.removeAt(index)
@@ -346,7 +429,7 @@ private fun WorkoutListDialog(
                                 }
                             }
                             Row(
-                                modifier = Modifier.padding(top = 8.dp),
+                                modifier = Modifier.padding(top = 12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedTextField(
@@ -354,35 +437,40 @@ private fun WorkoutListDialog(
                                     onValueChange = { draftExercises[index] = entry.copy(sets = it.toIntOrNull() ?: 0) },
                                     label = { Text("Sets") },
                                     modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                                 OutlinedTextField(
                                     value = entry.reps.toString(),
                                     onValueChange = { draftExercises[index] = entry.copy(reps = it.toIntOrNull() ?: 0) },
                                     label = { Text("Reps") },
                                     modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                             }
                         }
                     }
                 }
-                TextButton(
+                
+                OutlinedButton(
                     onClick = { draftExercises.add(ExerciseEntry("", 3, 10)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Add Another Exercise")
+                    Text("Add Exercise")
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onSave, shape = RoundedCornerShape(8.dp)) { Text("Save Changes") }
+            Button(onClick = onSave, shape = RoundedCornerShape(12.dp)) { Text("Save Plan") }
         },
         dismissButton = {
-            TextButton(onClick = onClear) { Text("Clear All", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onClear) { Text("Clear Plan", color = MaterialTheme.colorScheme.error) }
         },
+        shape = RoundedCornerShape(28.dp)
     )
 }
 
