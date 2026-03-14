@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private enum class NutritionPage {
     Kitchen,
@@ -64,6 +65,21 @@ private enum class MealType(val label: String) {
     Snack("Snack"),
     Dinner("Dinner"),
 }
+
+private enum class ScannedQuantityOption(val label: String) {
+    Quarter("1/4"),
+    Half("1/2"),
+    Full("Full"),
+    Multiple("Multiple"),
+    Grams("Grams"),
+}
+
+private data class ScannedQuantity(
+    val multiplier: Float,
+    val isValid: Boolean,
+    val usesPerServingValues: Boolean,
+    val summary: String,
+)
 
 private data class FoodEntry(
     val name: String,
@@ -711,10 +727,25 @@ private fun AddScannedFoodDialog(
 ) {
     var selectedMeal by rememberSaveable(suggestion.recognizedText) { mutableStateOf(MealType.Lunch) }
     var name by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.name) }
-    var caloriesText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.calories.toString()) }
-    var proteinText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.protein.toString()) }
-    var carbsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.carbs.toString()) }
-    var fatsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.fats.toString()) }
+    var selectedQuantityOption by rememberSaveable(suggestion.recognizedText) {
+        mutableStateOf(ScannedQuantityOption.Full)
+    }
+    var multipleServingsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf("2") }
+    var gramsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf("100") }
+
+    val selectedQuantity = calculateScannedQuantity(
+        option = selectedQuantityOption,
+        multipleServingsText = multipleServingsText,
+        gramsText = gramsText,
+    )
+    val baseCalories = if (selectedQuantity.usesPerServingValues) suggestion.calories else suggestion.caloriesPer100g
+    val baseProtein = if (selectedQuantity.usesPerServingValues) suggestion.protein else suggestion.proteinPer100g
+    val baseCarbs = if (selectedQuantity.usesPerServingValues) suggestion.carbs else suggestion.carbsPer100g
+    val baseFats = if (selectedQuantity.usesPerServingValues) suggestion.fats else suggestion.fatsPer100g
+    val scaledCalories = scaleNutritionValue(baseCalories, selectedQuantity.multiplier)
+    val scaledProtein = scaleNutritionValue(baseProtein, selectedQuantity.multiplier)
+    val scaledCarbs = scaleNutritionValue(baseCarbs, selectedQuantity.multiplier)
+    val scaledFats = scaleNutritionValue(baseFats, selectedQuantity.multiplier)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -722,64 +753,117 @@ private fun AddScannedFoodDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    label = { Text("Food name") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                MealTypeSelector(
-                    selectedMeal = selectedMeal,
-                    onMealSelected = { selectedMeal = it },
-                )
-                OutlinedTextField(
-                    value = caloriesText,
-                    onValueChange = { caloriesText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Calories") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = proteinText,
-                    onValueChange = { proteinText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Protein (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = carbsText,
-                    onValueChange = { carbsText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Carbs (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = fatsText,
-                    onValueChange = { fatsText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Fats (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                NutritionPanel(title = "Food details") {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        label = { Text("Food name") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MealTypeSelector(
+                        selectedMeal = selectedMeal,
+                        onMealSelected = { selectedMeal = it },
+                    )
+                }
+
+                NutritionPanel(title = "Quantity") {
+                    Text(
+                        text = "Serving options use per-serving values. Grams uses per-100g values.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(ScannedQuantityOption.entries.size) { index ->
+                            val option = ScannedQuantityOption.entries[index]
+                            FilterChip(
+                                selected = selectedQuantityOption == option,
+                                onClick = { selectedQuantityOption = option },
+                                label = { Text(option.label) },
+                            )
+                        }
+                    }
+                    when (selectedQuantityOption) {
+                        ScannedQuantityOption.Multiple -> {
+                            OutlinedTextField(
+                                value = multipleServingsText,
+                                onValueChange = { value ->
+                                    multipleServingsText = value.filter { char ->
+                                        char.isDigit() || char == '.' || char == ','
+                                    }
+                                },
+                                singleLine = true,
+                                label = { Text("How many full servings") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                        }
+                        ScannedQuantityOption.Grams -> {
+                            OutlinedTextField(
+                                value = gramsText,
+                                onValueChange = { value ->
+                                    gramsText = value.filter { char ->
+                                        char.isDigit() || char == '.' || char == ','
+                                    }
+                                },
+                                singleLine = true,
+                                label = { Text("Consumed grams") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                        }
+                        else -> Unit
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (selectedQuantity.isValid) {
+                        Text(
+                            text = "Selected amount: ${selectedQuantity.summary}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    } else {
+                        Text(
+                            text = "Enter a valid positive quantity.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                NutritionPanel(title = "Calculated nutrition") {
+                    Text(
+                        text = if (selectedQuantity.usesPerServingValues) {
+                            "Baseline: per serving"
+                        } else {
+                            "Baseline: per 100g"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Calories: $scaledCalories kcal")
+                    Text("Protein: $scaledProtein g")
+                    Text("Carbs: $scaledCarbs g")
+                    Text("Fats: $scaledFats g")
+                }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = selectedQuantity.isValid,
                 onClick = {
-                    val calories = caloriesText.toIntOrNull() ?: 0
-                    val protein = proteinText.toIntOrNull() ?: 0
-                    val carbs = carbsText.toIntOrNull() ?: 0
-                    val fats = fatsText.toIntOrNull() ?: 0
                     val food = FoodEntry(
                         name = name.ifBlank { "Scanned food" },
                         meal = selectedMeal,
-                        calories = calories,
-                        protein = protein,
-                        carbs = carbs,
-                        fats = fats,
-                        isHealthy = calories in 1..500,
+                        calories = scaledCalories,
+                        protein = scaledProtein,
+                        carbs = scaledCarbs,
+                        fats = scaledFats,
+                        isHealthy = scaledCalories in 1..500,
                     )
                     onAddFood(food)
                 },
@@ -793,6 +877,88 @@ private fun AddScannedFoodDialog(
             }
         },
     )
+}
+
+private fun calculateScannedQuantity(
+    option: ScannedQuantityOption,
+    multipleServingsText: String,
+    gramsText: String,
+): ScannedQuantity {
+    return when (option) {
+        ScannedQuantityOption.Quarter -> ScannedQuantity(
+            multiplier = 0.25f,
+            isValid = true,
+            usesPerServingValues = true,
+            summary = "1/4 serving",
+        )
+        ScannedQuantityOption.Half -> ScannedQuantity(
+            multiplier = 0.5f,
+            isValid = true,
+            usesPerServingValues = true,
+            summary = "1/2 serving",
+        )
+        ScannedQuantityOption.Full -> ScannedQuantity(
+            multiplier = 1f,
+            isValid = true,
+            usesPerServingValues = true,
+            summary = "1 serving",
+        )
+        ScannedQuantityOption.Multiple -> {
+            val servings = parsePositiveDecimal(multipleServingsText)
+            if (servings == null) {
+                ScannedQuantity(
+                    multiplier = 1f,
+                    isValid = false,
+                    usesPerServingValues = true,
+                    summary = "Invalid quantity",
+                )
+            } else {
+                ScannedQuantity(
+                    multiplier = servings,
+                    isValid = true,
+                    usesPerServingValues = true,
+                    summary = "${formatFloatForUi(servings)} servings",
+                )
+            }
+        }
+        ScannedQuantityOption.Grams -> {
+            val grams = parsePositiveDecimal(gramsText)
+            if (grams == null) {
+                ScannedQuantity(
+                    multiplier = 1f,
+                    isValid = false,
+                    usesPerServingValues = false,
+                    summary = "Invalid quantity",
+                )
+            } else {
+                ScannedQuantity(
+                    multiplier = grams / 100f,
+                    isValid = true,
+                    usesPerServingValues = false,
+                    summary = "${grams.roundToInt()} g",
+                )
+            }
+        }
+    }
+}
+
+private fun parsePositiveDecimal(value: String): Float? {
+    val normalized = value.trim().replace(",", ".")
+    val parsedValue = normalized.toFloatOrNull() ?: return null
+    return parsedValue.takeIf { it > 0f }
+}
+
+private fun scaleNutritionValue(baseValue: Int, multiplier: Float): Int {
+    return (baseValue * multiplier).roundToInt().coerceAtLeast(0)
+}
+
+private fun formatFloatForUi(value: Float): String {
+    val rounded = (value * 100f).roundToInt() / 100f
+    return if (rounded % 1f == 0f) {
+        rounded.roundToInt().toString()
+    } else {
+        rounded.toString()
+    }
 }
 
 @Composable

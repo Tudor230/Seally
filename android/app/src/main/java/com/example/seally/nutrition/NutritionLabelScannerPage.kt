@@ -11,7 +11,9 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -74,10 +76,16 @@ import kotlin.math.roundToInt
 
 data class NutritionLabelScanResult(
     val name: String,
+    // Per-serving values (used for quarter/half/full/multiple serving options)
     val calories: Int,
     val protein: Int,
     val carbs: Int,
     val fats: Int,
+    // Per-100g values (used for direct grams option)
+    val caloriesPer100g: Int = calories,
+    val proteinPer100g: Int = protein,
+    val carbsPer100g: Int = carbs,
+    val fatsPer100g: Int = fats,
     val recognizedText: String,
 )
 
@@ -466,7 +474,7 @@ private fun LiveDetectionOverlay(
 }
 
 private fun NutritionLabelScanResult.toLogPayload(): String {
-    return "name=$name, calories=$calories, protein=$protein, carbs=$carbs, fats=$fats, recognizedText=$recognizedText"
+    return "name=$name, serving=[$calories,$protein,$carbs,$fats], per100g=[$caloriesPer100g,$proteinPer100g,$carbsPer100g,$fatsPer100g], recognizedText=$recognizedText"
 }
 
 private class OnDeviceNutritionOcrEngine {
@@ -551,6 +559,7 @@ private class OnDeviceLiveDetectionEngine {
         "sugar",
     )
 
+    @OptIn(ExperimentalGetImage::class)
     fun analyze(
         imageProxy: ImageProxy,
         onDetection: (LiveDetectionResult?) -> Unit,
@@ -701,36 +710,53 @@ private class OpenFoodFactsApiClient {
                         ?: throw IllegalStateException("Open Food Facts response has no product data.")
                     val nutriments = productObject.optJSONObject("nutriments") ?: JSONObject()
 
-                    val calories = nutriments.readNumericValue(
-                        "energy-kcal_100g",
+                    val caloriesPerServing = nutriments.readNumericValue(
                         "energy-kcal_serving",
                         "energy-kcal",
-                    )?.roundToInt() ?: 0
-                    val protein = nutriments.readNumericValue(
-                        "proteins_100g",
+                    )?.roundToInt()
+                    val proteinPerServing = nutriments.readNumericValue(
                         "proteins_serving",
                         "proteins",
-                    )?.roundToInt() ?: 0
-                    val carbs = nutriments.readNumericValue(
-                        "carbohydrates_100g",
+                    )?.roundToInt()
+                    val carbsPerServing = nutriments.readNumericValue(
                         "carbohydrates_serving",
                         "carbohydrates",
-                    )?.roundToInt() ?: 0
-                    val fats = nutriments.readNumericValue(
-                        "fat_100g",
+                    )?.roundToInt()
+                    val fatsPerServing = nutriments.readNumericValue(
                         "fat_serving",
                         "fat",
-                    )?.roundToInt() ?: 0
+                    )?.roundToInt()
+
+                    val caloriesPer100g = nutriments.readNumericValue(
+                        "energy-kcal_100g",
+                        "energy-kcal",
+                    )?.roundToInt()
+                    val proteinPer100g = nutriments.readNumericValue(
+                        "proteins_100g",
+                        "proteins",
+                    )?.roundToInt()
+                    val carbsPer100g = nutriments.readNumericValue(
+                        "carbohydrates_100g",
+                        "carbohydrates",
+                    )?.roundToInt()
+                    val fatsPer100g = nutriments.readNumericValue(
+                        "fat_100g",
+                        "fat",
+                    )?.roundToInt()
                     val productName = productObject.optString("product_name")
                         .ifBlank { productObject.optString("product_name_en") }
                         .ifBlank { "Scanned barcode product" }
 
                     val mappedResult = NutritionLabelScanResult(
                         name = productName,
-                        calories = calories.coerceAtLeast(0),
-                        protein = protein.coerceAtLeast(0),
-                        carbs = carbs.coerceAtLeast(0),
-                        fats = fats.coerceAtLeast(0),
+                        calories = (caloriesPerServing ?: caloriesPer100g ?: 0).coerceAtLeast(0),
+                        protein = (proteinPerServing ?: proteinPer100g ?: 0).coerceAtLeast(0),
+                        carbs = (carbsPerServing ?: carbsPer100g ?: 0).coerceAtLeast(0),
+                        fats = (fatsPerServing ?: fatsPer100g ?: 0).coerceAtLeast(0),
+                        caloriesPer100g = (caloriesPer100g ?: caloriesPerServing ?: 0).coerceAtLeast(0),
+                        proteinPer100g = (proteinPer100g ?: proteinPerServing ?: 0).coerceAtLeast(0),
+                        carbsPer100g = (carbsPer100g ?: carbsPerServing ?: 0).coerceAtLeast(0),
+                        fatsPer100g = (fatsPer100g ?: fatsPerServing ?: 0).coerceAtLeast(0),
                         recognizedText = "barcode:$sanitizedBarcode",
                     )
                     Log.d(
