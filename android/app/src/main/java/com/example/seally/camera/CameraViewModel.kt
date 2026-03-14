@@ -33,10 +33,6 @@ data class CameraUiState(
     val mFrameWidth: Int = 0,
     val mFrameHeight: Int = 0,
     val mSelectedExercise: ExerciseType = ExerciseType.SQUAT,
-    val mPullUpBarLeftX: Float? = null,
-    val mPullUpBarLeftY: Float? = null,
-    val mPullUpBarRightX: Float? = null,
-    val mPullUpBarRightY: Float? = null,
     val mFormFeedback: FormFeedback = FormFeedback(),
     val mLiveKitStatus: String = "LiveKit idle",
 )
@@ -152,7 +148,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                                     )
                                     ExerciseType.PULLUP -> mPullUpFormFeedbackEngine.process(
                                         normalizedLandmarks = firstPose,
-                                        barCalibration = currentUiState.toPullUpBarCalibration(),
                                     )
                                 }
                                 mUiState.update {
@@ -285,59 +280,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setPullUpBarPoint(normalizedX: Float, normalizedY: Float) {
-        mUiState.update { currentState ->
-            when {
-                currentState.mPullUpBarLeftX == null || currentState.mPullUpBarLeftY == null -> {
-                    currentState.copy(
-                        mPullUpBarLeftX = normalizedX,
-                        mPullUpBarLeftY = normalizedY,
-                        mPullUpBarRightX = null,
-                        mPullUpBarRightY = null,
-                    )
-                }
-                currentState.mPullUpBarRightX == null || currentState.mPullUpBarRightY == null -> {
-                    val leftX = currentState.mPullUpBarLeftX ?: normalizedX
-                    val leftY = currentState.mPullUpBarLeftY ?: normalizedY
-                    if (normalizedX < leftX) {
-                        currentState.copy(
-                            mPullUpBarLeftX = normalizedX,
-                            mPullUpBarLeftY = normalizedY,
-                            mPullUpBarRightX = leftX,
-                            mPullUpBarRightY = leftY,
-                        )
-                    } else {
-                        currentState.copy(
-                            mPullUpBarRightX = normalizedX,
-                            mPullUpBarRightY = normalizedY,
-                        )
-                    }
-                }
-                else -> {
-                    currentState.copy(
-                        mPullUpBarLeftX = normalizedX,
-                        mPullUpBarLeftY = normalizedY,
-                        mPullUpBarRightX = null,
-                        mPullUpBarRightY = null,
-                    )
-                }
-            }
-        }
-    }
-
-    fun clearPullUpBarCalibration() {
-        mPullUpFormFeedbackEngine.reset()
-        mUiState.update {
-            it.copy(
-                mPullUpBarLeftX = null,
-                mPullUpBarLeftY = null,
-                mPullUpBarRightX = null,
-                mPullUpBarRightY = null,
-                mFormFeedback = FormFeedback(),
-            )
-        }
-    }
-
     private fun ensureLiveKitConnected() {
         if (mLiveKitUrl.isBlank() || mLiveKitToken.isBlank()) {
             if (!mHasShownLiveKitConfigError) {
@@ -448,22 +390,5 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
         private const val DEFAULT_LANDMARK_TOPIC = "pose.normalized.v1"
         private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
-    }
-}
-
-private fun CameraUiState.toPullUpBarCalibration(): PullUpBarCalibration? {
-    val leftX = mPullUpBarLeftX
-    val leftY = mPullUpBarLeftY
-    val rightX = mPullUpBarRightX
-    val rightY = mPullUpBarRightY
-    return if (leftX != null && leftY != null && rightX != null && rightY != null) {
-        PullUpBarCalibration(
-            mLeftX = leftX,
-            mLeftY = leftY,
-            mRightX = rightX,
-            mRightY = rightY,
-        )
-    } else {
-        null
     }
 }
