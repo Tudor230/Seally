@@ -1,6 +1,7 @@
 package com.example.seally
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -21,6 +22,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.camera.CameraViewModel
+import com.example.seally.exercises.ExercisesScreen
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.example.seally.goals.GoalsScreen
@@ -46,16 +53,47 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SeallyTheme {
-                SeallyApp()
+                val cameraViewModel: CameraViewModel = viewModel()
+                val uiState by cameraViewModel.uiState.collectAsState()
+
+                LaunchedEffect(uiState.mFormFeedback.mProblematicJoints, uiState.mFormFeedback.mErrorMessage) {
+                    val resultIntent = Intent().apply {
+                        putStringArrayListExtra(
+                            EXTRA_PROBLEMATIC_JOINTS,
+                            ArrayList(uiState.mFormFeedback.mProblematicJoints),
+                        )
+                        putExtra(EXTRA_ERROR_MESSAGE, uiState.mFormFeedback.mErrorMessage)
+                    }
+                    setResult(RESULT_OK, resultIntent)
+                }
+
+                SeallyApp(mCameraViewModel = cameraViewModel)
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_PROBLEMATIC_JOINTS = "extra_problematic_joints"
+        const val EXTRA_ERROR_MESSAGE = "extra_error_message"
     }
 }
 
 @PreviewScreenSizes
 @Composable
-fun SeallyApp() {
+fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXERCISES) }
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val hasCameraPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasCameraPermission) {
+            mCameraViewModel.preWarmPoseLandmarker()
+        }
+    }
     var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
 
     Scaffold(
@@ -90,8 +128,7 @@ fun SeallyApp() {
             AppDestinations.HOME -> HomeScreen(
                 modifier = Modifier.padding(innerPadding),
             )
-            AppDestinations.EXERCISES -> PlaceholderScreen(
-                title = "Exercises",
+            AppDestinations.EXERCISES -> ExercisesScreen(
                 modifier = Modifier.padding(innerPadding),
             )
         }
