@@ -48,6 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -190,6 +191,14 @@ fun NutritionScreen(
 
     var foodPendingDeletion by remember { mutableStateOf<FoodEntry?>(null) }
 
+    val context = LocalContext.current
+    val backgroundRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/homepage.png")
+        .build()
+    val musclesImageRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/muscles.png")
+        .build()
+
     BackHandler(
         enabled = mViewModel.canNavigateBackInNutrition(),
         onBack = mViewModel::navigateBackInNutrition,
@@ -226,55 +235,75 @@ fun NutritionScreen(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    )
-                )
-            )
+        modifier = modifier.fillMaxSize()
     ) {
-        when (currentPage) {
-            NutritionPage.Kitchen -> KitchenMainPage(
-                caloriesConsumed = caloriesConsumed,
-                calorieTarget = calorieTarget,
-                waterConsumedMl = waterConsumedMl,
-                waterTargetMl = waterTargetMl,
-                onOpenFood = mViewModel::openFoodPage,
-                onOpenWater = mViewModel::openWaterPage,
-            )
-            NutritionPage.Food -> FoodTrackingPage(
-                foods = foods,
-                caloriesConsumed = caloriesConsumed,
-                calorieTarget = calorieTarget,
-                proteinConsumed = proteinConsumed,
-                proteinTarget = proteinTarget,
-                carbsConsumed = carbsConsumed,
-                carbsTarget = carbsTarget,
-                fatsConsumed = fatsConsumed,
-                fatTarget = fatTarget,
-                sugarsConsumed = sugarsConsumed,
-                sugarTarget = sugarTarget,
-                fibersConsumed = fibersConsumed,
-                fiberTarget = fiberTarget,
-                onBack = mViewModel::navigateBackInNutrition,
-                onOpenCamera = mViewModel::openCameraPage,
-                onManualAddFood = mViewModel::addManualFood,
-                onRemoveFood = { foodPendingDeletion = it },
-            )
-            NutritionPage.Water -> WaterTrackingPage(
-                waterConsumedMl = waterConsumedMl,
-                waterTargetMl = waterTargetMl,
-                onBack = mViewModel::navigateBackInNutrition,
-                onAddWater = mViewModel::addWater,
-                onRemoveWater = mViewModel::removeWater,
-            )
-            NutritionPage.Camera -> CameraTrackingPage(
-                onBack = mViewModel::navigateBackInNutrition,
-                onAddFoodFromScan = mViewModel::addScannedFood,
+        // --- Background Image with Transparency ---
+        AsyncImage(
+            model = backgroundRequest,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = 0.7f
+        )
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (currentPage == NutritionPage.Kitchen) {
+                TopHeader()
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                when (currentPage) {
+                    NutritionPage.Kitchen -> KitchenMainPage(
+                        caloriesConsumed = caloriesConsumed,
+                        calorieTarget = calorieTarget,
+                        waterConsumedMl = waterConsumedMl,
+                        waterTargetMl = waterTargetMl,
+                        onOpenFood = mViewModel::openFoodPage,
+                        onOpenWater = mViewModel::openWaterPage,
+                    )
+                    NutritionPage.Food -> FoodTrackingPage(
+                        foods = foods,
+                        caloriesConsumed = caloriesConsumed,
+                        calorieTarget = calorieTarget,
+                        proteinConsumed = proteinConsumed,
+                        proteinTarget = proteinTarget,
+                        carbsConsumed = carbsConsumed,
+                        carbsTarget = carbsTarget,
+                        fatsConsumed = fatsConsumed,
+                        fatTarget = fatTarget,
+                        sugarsConsumed = sugarsConsumed,
+                        sugarTarget = sugarTarget,
+                        fibersConsumed = fibersConsumed,
+                        fiberTarget = fiberTarget,
+                        onBack = mViewModel::navigateBackInNutrition,
+                        onOpenCamera = mViewModel::openCameraPage,
+                        onManualAddFood = mViewModel::addManualFood,
+                        onRemoveFood = { foodPendingDeletion = it },
+                    )
+                    NutritionPage.Water -> WaterTrackingPage(
+                        waterConsumedMl = waterConsumedMl,
+                        waterTargetMl = waterTargetMl,
+                        onBack = mViewModel::navigateBackInNutrition,
+                        onAddWater = mViewModel::addWater,
+                        onRemoveWater = mViewModel::removeWater,
+                    )
+                    NutritionPage.Camera -> CameraTrackingPage(
+                        onBack = mViewModel::navigateBackInNutrition,
+                        onAddFoodFromScan = mViewModel::addScannedFood,
+                    )
+                }
+            }
+        }
+
+        if (currentPage == NutritionPage.Kitchen) {
+            AsyncImage(
+                model = musclesImageRequest,
+                contentDescription = "Seal Character",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxHeight(0.75f)
+                    .padding(bottom = 20.dp)
             )
         }
     }
@@ -289,17 +318,14 @@ private fun KitchenMainPage(
     onOpenFood: () -> Unit,
     onOpenWater: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/skinny - no background.png")
-        .build()
-
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = Modifier.fillMaxSize(),
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -327,26 +353,15 @@ private fun KitchenMainPage(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-
-            AsyncImage(
-                model = skinnyImageRequest,
-                contentDescription = "Character",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth(0.8f)
-                    .aspectRatio(1f)
-                    .align(Alignment.CenterHorizontally)
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
         }
 
+        // --- Action Buttons closer to margins ---
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
+                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             FloatingActionButton(
                 onClick = onOpenFood,
@@ -368,6 +383,7 @@ private fun KitchenMainPage(
                 Icon(Icons.Default.LocalDrink, contentDescription = "Water", modifier = Modifier.size(32.dp))
             }
         }
+
     }
 }
 
@@ -386,7 +402,7 @@ private fun StatCard(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         tonalElevation = 2.dp,
         shadowElevation = 1.dp
     ) {
@@ -470,16 +486,18 @@ private fun FoodTrackingPage(
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                     )
                 }
+                Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     text = "Food Tracking",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -504,7 +522,8 @@ private fun FoodTrackingPage(
                         text = "Today's Meals",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -568,7 +587,9 @@ private fun MacroOverviewPanel(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -580,7 +601,7 @@ private fun MacroOverviewPanel(
                     Text(
                         text = "Calories",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
@@ -592,7 +613,7 @@ private fun MacroOverviewPanel(
                         Text(
                             text = " / $calorieTarget kcal",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
                     }
@@ -609,7 +630,8 @@ private fun MacroOverviewPanel(
                     Text(
                         text = "${(calories.toFloat() / calorieTarget * 100).toInt()}%",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -630,7 +652,7 @@ private fun MacroOverviewPanel(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
@@ -659,11 +681,12 @@ private fun MacroMiniStat(label: String, value: Int, target: Int, color: Color) 
             Text(
                 text = "${value}g",
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelMedium)
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -671,8 +694,8 @@ private fun MacroMiniStat(label: String, value: Int, target: Int, color: Color) 
 private fun SecondaryMacroStat(label: String, value: Int, target: Int, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium)
-            Text(text = "$value / $target g", style = MaterialTheme.typography.labelSmall)
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = "$value / $target g", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(modifier = Modifier.height(4.dp))
         LinearProgressIndicator(
@@ -693,8 +716,9 @@ private fun MealCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -717,7 +741,8 @@ private fun MealCard(
                         Text(
                             text = mealType.label,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         val totalCals = mealFoods.sumOf { it.calories }
                         Text(
@@ -749,7 +774,8 @@ private fun MealCard(
                             Text(
                                 text = food.name,
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "P ${food.protein}g • C ${food.carbs}g • F ${food.fats}g",
@@ -855,16 +881,18 @@ private fun WaterTrackingPage(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                     )
                 }
+                Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     text = "Water Intake",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             
@@ -937,8 +965,9 @@ private fun WaterTrackingPage(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            tonalElevation = 2.dp,
+            shadowElevation = 2.dp
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -947,7 +976,8 @@ private fun WaterTrackingPage(
                 Text(
                     text = "Select Amount",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Row(
