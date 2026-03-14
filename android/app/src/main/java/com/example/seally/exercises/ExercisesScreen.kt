@@ -107,11 +107,11 @@ fun ExercisesScreen(
     val mWorkoutPlanViewModel: WorkoutPlanViewModel = viewModel()
     val mTodayWorkout = mWorkoutPlanViewModel.mWorkoutPlans[LocalDate.now()].orEmpty()
     val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/muscles.png")
+        .data("file:///android_asset/seals/muscles.png")
         .build()
 
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/homepage.png")
+        .data("file:///android_asset/backgrounds/homepage.png")
         .build()
 
     Box(

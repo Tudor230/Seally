@@ -24,6 +24,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,6 +95,7 @@ enum class GoalMetric(
     val mSuggestedCurrent: Float,
     val mSuggestedTarget: Float,
     val mDefaultLabels: List<String>,
+    val mIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
     STEPS(
         mLabel = "Steps",
@@ -102,6 +106,7 @@ enum class GoalMetric(
         mSuggestedCurrent = 8_000f,
         mSuggestedTarget = 10_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.TrendingUp
     ),
     WEIGHT(
         mLabel = "Weight",
@@ -112,9 +117,10 @@ enum class GoalMetric(
         mSuggestedCurrent = 170f,
         mSuggestedTarget = 150f,
         mDefaultLabels = emptyList(),
+        mIcon = Icons.Default.Flag
     ),
     RUNNING(
-        mLabel = "Running Distance",
+        mLabel = "Running",
         mUnit = "km",
         mAccentColor = Color(0xFFB17AE0),
         mChartType = GoalChartType.BAR,
@@ -122,9 +128,10 @@ enum class GoalMetric(
         mSuggestedCurrent = 30f,
         mSuggestedTarget = 50f,
         mDefaultLabels = emptyList(),
+        mIcon = Icons.Default.TrendingUp
     ),
     WATER(
-        mLabel = "Water Intake",
+        mLabel = "Water",
         mUnit = "ml",
         mAccentColor = Color(0xFF4D8EFF),
         mChartType = GoalChartType.BAR,
@@ -132,6 +139,7 @@ enum class GoalMetric(
         mSuggestedCurrent = 1_800f,
         mSuggestedTarget = 2_500f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.TrendingUp
     ),
     CALORIES(
         mLabel = "Calories",
@@ -142,16 +150,7 @@ enum class GoalMetric(
         mSuggestedCurrent = 2_300f,
         mSuggestedTarget = 2_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
-    ),
-    MACROS(
-        mLabel = "Macros",
-        mUnit = "g",
-        mAccentColor = Color(0xFF8E72D8),
-        mChartType = GoalChartType.BAR,
-        mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 180f,
-        mSuggestedTarget = 220f,
-        mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.Flag
     ),
 }
 
@@ -179,7 +178,7 @@ fun GoalsScreen(
 
     val context = LocalContext.current
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/homepage.png")
+        .data("file:///android_asset/backgrounds/homepage.png")
         .build()
 
     Box(
@@ -202,24 +201,57 @@ fun GoalsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 20.dp, end = 20.dp, top = 16.dp),
+                    .padding(horizontal = 20.dp),
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Active Goals",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 if (mGoals.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "No goals yet. Add a metric to start tracking progress.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(32.dp)
-                        )
+                    Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                        Surface(
+                            modifier = Modifier.padding(24.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.Flag,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "No tracking goals yet.\nStart by adding one below!",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(1),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(bottom = 100.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 120.dp),
+                        modifier = Modifier.fillMaxSize().weight(1f),
                     ) {
                         items(items = mGoals, key = { it.mId }) { mGoal ->
                             GoalCard(
@@ -232,16 +264,21 @@ fun GoalsScreen(
             }
         }
 
-        FloatingActionButton(
-            onClick = { mShowAddGoalDialog = true },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = CircleShape,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 24.dp),
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Goal")
+        // --- ADD GOAL BUTTON (Large & Stylized at Bottom Right) ---
+        if (mAvailableMetrics.isNotEmpty()) {
+            FloatingActionButton(
+                onClick = { mShowAddGoalDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .size(72.dp),
+                elevation = FloatingActionButtonDefaults.elevation(8.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Goal", modifier = Modifier.size(36.dp))
+            }
         }
     }
 
@@ -300,14 +337,14 @@ private fun GoalCard(
                     Surface(
                         color = mColor.copy(alpha = 0.15f),
                         shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = goal.mMetric.mLabel.first().toString(),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = mColor
+                            Icon(
+                                imageVector = goal.mMetric.mIcon,
+                                contentDescription = null,
+                                tint = mColor,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -327,12 +364,12 @@ private fun GoalCard(
                     }
                 }
                 
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
                     CircularProgressIndicator(
                         progress = { mProgress },
                         modifier = Modifier.fillMaxSize(),
                         color = mColor,
-                        strokeWidth = 4.dp,
+                        strokeWidth = 5.dp,
                         strokeCap = StrokeCap.Round,
                         trackColor = mColor.copy(alpha = 0.1f)
                     )
@@ -414,7 +451,7 @@ private fun GoalDetailsDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "${goal.mMetric.mLabel} Details",
+                text = "${goal.mMetric.mLabel} Progress",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -426,7 +463,7 @@ private fun GoalDetailsDialog(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    color = mColor.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -435,11 +472,11 @@ private fun GoalDetailsDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Current", style = MaterialTheme.typography.labelSmall)
+                            Text("CURRENT", style = MaterialTheme.typography.labelSmall, color = mColor, fontWeight = FontWeight.Bold)
                             Text(goal.formatCurrent(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Target", style = MaterialTheme.typography.labelSmall)
+                            Text("GOAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(goal.formatTarget(), style = MaterialTheme.typography.titleMedium)
                         }
                     }
@@ -461,8 +498,12 @@ private fun GoalDetailsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
-                Text("Close")
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Text("Close Details")
             }
         },
         dismissButton = {
@@ -477,8 +518,8 @@ private fun GoalDetailsDialog(
     if (mShowDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { mShowDeleteConfirm = false },
-            title = { Text("Delete Goal?") },
-            text = { Text("This will remove the tracking for '${goal.mMetric.mLabel}'. All history will be lost.") },
+            title = { Text("Stop tracking goal?") },
+            text = { Text("Are you sure you want to delete '${goal.mMetric.mLabel}'? All history will be lost.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -488,7 +529,7 @@ private fun GoalDetailsDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Delete")
+                    Text("Delete Goal")
                 }
             },
             dismissButton = {
@@ -655,7 +696,6 @@ private fun AddGoalDialog(
     var mTargetValue by remember {
         mutableStateOf(availableMetrics.firstOrNull()?.mSuggestedTarget.toInputValue())
     }
-    var mShowMetricsDropdown by remember { mutableStateOf(false) }
 
     LaunchedEffect(mSelectedMetric) {
         mSelectedMetric?.let { mMetric ->
@@ -670,52 +710,46 @@ private fun AddGoalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Track New Metric", fontWeight = FontWeight.Bold) },
+        title = { Text(text = "Place New Goal", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                Column {
-                    Text(
-                        text = "Select Metric",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(modifier = Modifier.fillMaxWidth()) {
+                // Metric Grid Selector
+                Text(
+                    text = "SELECT METRIC",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.height(180.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(availableMetrics) { metric ->
+                        val isSelected = mSelectedMetric == metric
                         Surface(
-                            onClick = { mShowMetricsDropdown = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            onClick = { mSelectedMetric = metric },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) metric.mAccentColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.aspectRatio(1f),
+                            border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(4.dp)
                             ) {
-                                Text(mSelectedMetric?.mLabel ?: "Select", style = MaterialTheme.typography.bodyLarge)
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                            }
-                        }
-
-                        DropdownMenu(
-                            expanded = mShowMetricsDropdown,
-                            onDismissRequest = { mShowMetricsDropdown = false },
-                            modifier = Modifier.fillMaxWidth(0.7f),
-                        ) {
-                            availableMetrics.forEach { mMetric ->
-                                DropdownMenuItem(
-                                    text = { Text(mMetric.mLabel) },
-                                    onClick = {
-                                        mSelectedMetric = mMetric
-                                        mShowMetricsDropdown = false
-                                    },
-                                )
+                                Icon(metric.mIcon, contentDescription = null, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(metric.mLabel, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 1)
                             }
                         }
                     }
@@ -723,41 +757,37 @@ private fun AddGoalDialog(
 
                 mSelectedMetric?.let { mMetric ->
                     val mDirectionText = if (mMetric.mGoalDirection == GoalDirection.AT_LEAST) {
-                        "Goal: At least ${mMetric.mSuggestedTarget.toInputValue()} ${mMetric.mUnit}"
+                        "Set a target of at least ${mMetric.mUnit}"
                     } else {
-                        "Goal: At most ${mMetric.mSuggestedTarget.toInputValue()} ${mMetric.mUnit}"
+                        "Stay below a target of ${mMetric.mUnit}"
                     }
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = mDirectionText,
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(8.dp),
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
+                    Text(
+                        text = mDirectionText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 OutlinedTextField(
                     value = mCurrentValue,
                     onValueChange = { mCurrentValue = it },
                     singleLine = true,
-                    label = { Text("Current Value") },
+                    label = { Text("Starting Value") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                 )
 
                 OutlinedTextField(
                     value = mTargetValue,
                     onValueChange = { mTargetValue = it },
                     singleLine = true,
-                    label = { Text("Target Value") },
+                    label = { Text("Goal Target") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null) }
                 )
             }
         },
@@ -765,17 +795,18 @@ private fun AddGoalDialog(
             Button(
                 onClick = { mSelectedMetric?.let { onGoalAdded(it, mCurrent, mTarget) } },
                 enabled = mCanAdd,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
-                Text("Add Goal")
+                Text("Start Tracking Goal", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        shape = RoundedCornerShape(28.dp)
+        shape = RoundedCornerShape(32.dp)
     )
 }
 
@@ -787,14 +818,6 @@ private fun buildDefaultGoals(): List<GoalUiModel> = listOf(
         mTargetValue = 10_000f,
         mHistoryValues = listOf(0.18f, 0.25f, 0.43f, 0.39f, 0.57f, 0.44f, 0.53f),
         mChartLabels = GoalMetric.STEPS.mDefaultLabels,
-    ),
-    GoalUiModel(
-        mId = 2L,
-        mMetric = GoalMetric.CALORIES,
-        mCurrentValue = 1_850f,
-        mTargetValue = 2_200f,
-        mHistoryValues = listOf(0.62f, 0.68f, 0.7f, 0.74f, 0.78f, 0.82f, 0.84f),
-        mChartLabels = GoalMetric.CALORIES.mDefaultLabels,
     ),
     GoalUiModel(
         mId = 3L,

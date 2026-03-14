@@ -194,10 +194,10 @@ fun NutritionScreen(
 
     val context = LocalContext.current
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/homepage.png")
+        .data("file:///android_asset/backgrounds/homepage.png")
         .build()
     val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/muscles.png")
+        .data("file:///android_asset/seals/muscles.png")
         .build()
 
     BackHandler(
@@ -826,7 +826,7 @@ private fun WaterTrackingPage(
 ) {
     val context = LocalContext.current
     val waterSvgRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/water_glass_icon.svg")
+        .data("file:///android_asset/icons/water_glass.svg")
         .decoderFactory(SvgDecoder.Factory())
         .build()
 
