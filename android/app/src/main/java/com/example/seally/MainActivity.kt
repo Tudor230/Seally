@@ -21,7 +21,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -39,6 +37,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
+import com.example.seally.nutrition.NutritionScreen
 import com.example.seally.ui.theme.SeallyTheme
 
 private val mBottomNavIconSize = 28.dp
@@ -59,41 +58,36 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SeallyApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.EXERCISES) }
-    val context = LocalContext.current
-    val cameraViewModel: CameraViewModel = viewModel()
-
-    LaunchedEffect(Unit) {
-        val hasCameraPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA,
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (hasCameraPermission) {
-            cameraViewModel.preWarmPoseLandmarker()
-        }
-    }
+    var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar {
-                AppDestinations.entries.forEach { destination ->
-                    NavigationBarItem(
-                        selected = destination == currentDestination,
-                        onClick = { currentDestination = destination },
-                        icon = {
-                            DestinationIcon(destination = destination)
-                        },
-                        label = { Text(destination.label) },
-                    )
+            val shouldRenderBottomBar = currentDestination != AppDestinations.NUTRITION ||
+                shouldShowBottomBarForNutrition
+            if (shouldRenderBottomBar) {
+                NavigationBar {
+                    AppDestinations.entries.forEach { destination ->
+                        NavigationBarItem(
+                            selected = destination == currentDestination,
+                            onClick = { currentDestination = destination },
+                            icon = {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = destination.label,
+                                )
+                            },
+                            label = { Text(destination.label) },
+                        )
+                    }
                 }
             }
         },
     ) { innerPadding ->
         when (currentDestination) {
-            AppDestinations.NUTRITION -> PlaceholderScreen(
-                title = "Nutrition",
+            AppDestinations.NUTRITION -> NutritionScreen(
                 modifier = Modifier.padding(innerPadding),
+                onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
             )
             AppDestinations.GOALS -> GoalsScreen(
                 modifier = Modifier.padding(innerPadding),

@@ -16,3 +16,6 @@ local.properties
 .github
 .copilot
 .qwen
+.trae/
+.idea/
+*.log

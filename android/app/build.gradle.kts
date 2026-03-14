@@ -68,6 +68,11 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation("com.google.mediapipe:tasks-vision:0.10.32")
 
+    implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.vision.common)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
