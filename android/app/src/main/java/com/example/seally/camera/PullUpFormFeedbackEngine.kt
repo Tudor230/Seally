@@ -14,6 +14,7 @@ private enum class PullUpPhase {
 class PullUpFormFeedbackEngine {
     private var mRepCount: Int = 0
     private var mPhase: PullUpPhase = PullUpPhase.DEAD_HANG
+    private var mHasDetectedStartPosition: Boolean = false
     private var mHasReachedTopInCurrentRep: Boolean = false
     private var mHasStableHandsInCurrentRep: Boolean = true
     private var mWristAnchor: WristAnchor? = null
@@ -60,6 +61,7 @@ class PullUpFormFeedbackEngine {
         val isMouthBelowHands = mouthY > (handsY + MOUTH_BELOW_HANDS_MARGIN)
         val isBottomPosition = isArmsExtended && isMouthBelowHands
 
+        var speechCue: String? = null
         if (isBottomPosition && mWristAnchor == null) {
             mWristAnchor = WristAnchor(
                 mLeftX = frontLandmarks.mLeftWrist.x(),
@@ -84,16 +86,24 @@ class PullUpFormFeedbackEngine {
                         mRightX = frontLandmarks.mRightWrist.x(),
                         mRightY = frontLandmarks.mRightWrist.y(),
                     )
-                } else if (isHandsStable) {
+                    if (isHandsStable && !mHasDetectedStartPosition) {
+                        mHasDetectedStartPosition = true
+                        speechCue = PULL_UP_CUE
+                    }
+                } else if (mHasDetectedStartPosition && isHandsStable) {
                     mPhase = PullUpPhase.PULLING
-                    mHasReachedTopInCurrentRep = false
-                    mHasStableHandsInCurrentRep = true
                 }
             }
             PullUpPhase.PULLING -> {
                 if (isMouthAboveHands) {
                     mPhase = PullUpPhase.TOP
-                    mHasReachedTopInCurrentRep = true
+                    if (!mHasReachedTopInCurrentRep) {
+                        mHasReachedTopInCurrentRep = true
+                        if (mHasStableHandsInCurrentRep) {
+                            mRepCount += 1
+                        }
+                        speechCue = REP_COMPLETE_CUE
+                    }
                 } else if (isBottomPosition) {
                     mPhase = PullUpPhase.DEAD_HANG
                 }
@@ -105,10 +115,8 @@ class PullUpFormFeedbackEngine {
             }
             PullUpPhase.LOWERING -> {
                 if (isBottomPosition) {
-                    if (mHasReachedTopInCurrentRep && mHasStableHandsInCurrentRep) {
-                        mRepCount += 1
-                    }
                     mPhase = PullUpPhase.DEAD_HANG
+                    mHasDetectedStartPosition = false
                     mHasReachedTopInCurrentRep = false
                     mHasStableHandsInCurrentRep = true
                 }
@@ -132,6 +140,7 @@ class PullUpFormFeedbackEngine {
         val isCorrecting = mPersistedCue != null
         return FormFeedback(
             mPrimaryCue = mPersistedCue,
+            mSpeechCue = speechCue,
             mStatus = when {
                 isCorrecting -> ExerciseStatus.ERROR
                 mPhase == PullUpPhase.DEAD_HANG -> ExerciseStatus.READY
@@ -147,6 +156,7 @@ class PullUpFormFeedbackEngine {
     fun reset() {
         mRepCount = 0
         mPhase = PullUpPhase.DEAD_HANG
+        mHasDetectedStartPosition = false
         mHasReachedTopInCurrentRep = false
         mHasStableHandsInCurrentRep = true
         mWristAnchor = null
@@ -256,6 +266,8 @@ class PullUpFormFeedbackEngine {
         private const val WRIST_STABILITY_TOLERANCE = 0.06f
         private const val PERSISTENCE_FRAMES = 8
         private const val CLEARANCE_FRAMES = 8
+        private const val PULL_UP_CUE = "Pull up"
+        private const val REP_COMPLETE_CUE = "Pull-up complete"
     }
 }
 

@@ -84,6 +84,7 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
+    var mLastShownGuideExercise by remember { mutableStateOf<ExerciseType?>(null) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -136,6 +137,25 @@ fun CameraScreen(
             modifier = modifier.fillMaxSize(),
         )
         return
+    }
+
+    LaunchedEffect(
+        uiState.mHasCompletedInitialPermissionCheck,
+        uiState.mHasCameraPermission,
+        uiState.mIsStartupCameraLoading,
+        uiState.mSelectedExercise,
+    ) {
+        if (
+            !uiState.mHasCompletedInitialPermissionCheck ||
+            !uiState.mHasCameraPermission ||
+            uiState.mIsStartupCameraLoading
+        ) {
+            mLastShownGuideExercise = null
+            return@LaunchedEffect
+        }
+        if (mLastShownGuideExercise == uiState.mSelectedExercise) return@LaunchedEffect
+        context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
+        mLastShownGuideExercise = uiState.mSelectedExercise
     }
 
     val mMessageToAnnounce = uiState.mErrorMessage
@@ -268,17 +288,6 @@ fun CameraScreen(
             )
         }
 
-        Text(
-            text = uiState.mLiveKitStatus,
-            color = Color.White,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(12.dp)
-                .background(Color(0x88000000))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        )
-
         FeedbackPanel(
             feedback = uiState.mFormFeedback,
             exerciseType = uiState.mSelectedExercise,
@@ -288,6 +297,18 @@ fun CameraScreen(
                 .padding(12.dp),
         )
     }
+}
+
+private fun createExerciseGuideIntent(
+    context: Context,
+    exerciseType: ExerciseType,
+): Intent {
+    val activityClass = when (exerciseType) {
+        ExerciseType.SQUAT -> SquatGuideActivity::class.java
+        ExerciseType.PLANK -> PlankGuideActivity::class.java
+        ExerciseType.PULLUP -> PullupGuideActivity::class.java
+    }
+    return Intent(context, activityClass)
 }
 
 @Composable
@@ -374,13 +395,20 @@ private class ErrorSpeechAnnouncer(context: Context) : TextToSpeech.OnInitListen
     private var mLastAnnouncedErrorMessage: String? = null
 
     override fun onInit(status: Int) {
-        if (status != TextToSpeech.SUCCESS) return
-
-        val languageResult = mTextToSpeech.setLanguage(Locale.getDefault())
-        if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+        if (status != TextToSpeech.SUCCESS) {
+            mIsReady = false
             return
         }
 
+        val defaultLanguageResult = mTextToSpeech.setLanguage(Locale.getDefault())
+        if (
+            defaultLanguageResult == TextToSpeech.LANG_MISSING_DATA ||
+            defaultLanguageResult == TextToSpeech.LANG_NOT_SUPPORTED
+        ) {
+            mTextToSpeech.setLanguage(Locale.US)
+        }
+
+        // Keep TTS usable even if locale selection reports unsupported.
         mIsReady = true
         val pendingMessage = mPendingErrorMessage
         if (pendingMessage != null) {
