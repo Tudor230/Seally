@@ -6,7 +6,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,20 +26,54 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
+import com.example.seally.camera.CameraScreen
+import com.example.seally.camera.CameraViewModel
+import com.example.seally.camera.ExerciseType
 
 @Composable
 fun ExercisesScreen(
     modifier: Modifier = Modifier,
+    mCameraViewModel: CameraViewModel,
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
 ) {
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
+    var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+
+    if (mSelectedExerciseForChecker != null) {
+        Box(modifier = modifier.fillMaxSize()) {
+            CameraScreen(
+                modifier = Modifier.fillMaxSize(),
+                mViewModel = mCameraViewModel,
+                mShowExerciseGuideOnEntry = true,
+            )
+            IconButton(
+                onClick = { mSelectedExerciseForChecker = null },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 12.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Form checker",
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 20.dp),
+            )
+        }
+        return
+    }
 
     if (showDumbbellPage) {
         DumbbellWorkoutsScreen(
             modifier = modifier,
             onBackClick = { showDumbbellPage = false },
+            onExerciseSelected = { mExercise ->
+                mCameraViewModel.setSelectedExercise(mExercise)
+                mSelectedExerciseForChecker = mExercise
+            },
         )
         return
     }
@@ -55,7 +93,7 @@ fun ExercisesScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/lilseal.png")
+        .data("file:///android_asset/icons/muscles.png")
         .build()
 
     val calendarIconRequest = ImageRequest.Builder(context)
@@ -67,7 +105,7 @@ fun ExercisesScreen(
         .build()
 
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/background_exercises.png")
+        .data("file:///android_asset/icons/gyim.jpeg")
         .build()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -98,8 +136,8 @@ fun ExercisesScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = 10.dp)
-                .fillMaxHeight(0.92f)
+               // .offset(y = 0.dp)
+                .fillMaxHeight(0.88f)
                 .padding(horizontal = 12.dp)
         )
 

@@ -24,15 +24,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +79,7 @@ private val POSE_CONNECTIONS = listOf(
 fun CameraScreen(
     modifier: Modifier = Modifier,
     mViewModel: CameraViewModel = viewModel(),
+    mShowExerciseGuideOnEntry: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -87,7 +88,7 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mLastShownGuideExercise by remember { mutableStateOf<ExerciseType?>(null) }
+    var mHasShownEntryGuide by remember { mutableStateOf(false) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -146,19 +147,18 @@ fun CameraScreen(
         uiState.mHasCompletedInitialPermissionCheck,
         uiState.mHasCameraPermission,
         uiState.mIsStartupCameraLoading,
-        uiState.mSelectedExercise,
+        mShowExerciseGuideOnEntry,
     ) {
         if (
             !uiState.mHasCompletedInitialPermissionCheck ||
             !uiState.mHasCameraPermission ||
             uiState.mIsStartupCameraLoading
         ) {
-            mLastShownGuideExercise = null
             return@LaunchedEffect
         }
-        if (mLastShownGuideExercise == uiState.mSelectedExercise) return@LaunchedEffect
+        if (!mShowExerciseGuideOnEntry || mHasShownEntryGuide) return@LaunchedEffect
         context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
-        mLastShownGuideExercise = uiState.mSelectedExercise
+        mHasShownEntryGuide = true
     }
 
     val mMessageToAnnounce = uiState.mErrorMessage
@@ -260,19 +260,10 @@ fun CameraScreen(
 
         Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.TopEnd)
                 .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Button(onClick = { mViewModel.toggleExerciseMode() }) {
-                Text(
-                    when (uiState.mSelectedExercise) {
-                        ExerciseType.SQUAT -> "Switch to Plank"
-                        ExerciseType.PLANK -> "Switch to Pullup"
-                        ExerciseType.PULLUP -> "Switch to Squat"
-                    },
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
                 mViewModel.onLensSwitchStarted()
                 mSwitchSnapshot = mPreviewView?.bitmap?.asImageBitmap()
@@ -281,6 +272,17 @@ fun CameraScreen(
             }) {
                 Text(if (uiState.mIsFrontCamera) "Back camera" else "Front camera")
             }
+            var mIsDialogOpen by remember { mutableStateOf(false) }
+            Button(onClick = { mIsDialogOpen = true }) {
+                Text("LiveKit")
+            }
+
+            LiveKitConnectionDialog(
+                mViewModel = mViewModel,
+                uiState = uiState,
+                isOpen = mIsDialogOpen,
+                onDismiss = { mIsDialogOpen = false },
+            )
         }
 
         uiState.mErrorMessage?.let { message ->
@@ -534,5 +536,84 @@ private fun StartupLoadingContent(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun LiveKitConnectionDialog(
+    mViewModel: CameraViewModel,
+    uiState: CameraUiState,
+    isOpen: Boolean,
+    onDismiss: () -> Unit,
+) {
+    var mRoomCodeInput by remember { mutableStateOf(uiState.mRoomCode) }
+
+    LaunchedEffect(isOpen) {
+        if (isOpen) {
+            mRoomCodeInput = uiState.mRoomCode
+        }
+    }
+
+    LaunchedEffect(uiState.mIsLiveKitConnected) {
+        if (uiState.mIsLiveKitConnected) {
+            onDismiss()
+        }
+    }
+
+    if (isOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Connect to LiveKit Room") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = mRoomCodeInput,
+                        onValueChange = { value ->
+                            mRoomCodeInput = value.take(6).uppercase()
+                            mViewModel.setRoomCode(mRoomCodeInput)
+                        },
+                        label = { Text("Room Code") },
+                        placeholder = { Text("e.g., ABC123") },
+                        singleLine = true,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                    Text(
+                        text = uiState.mLiveKitStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (uiState.mIsLiveKitConnected) Color.Green else Color.Gray,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                if (uiState.mIsLiveKitConnected) {
+                    Button(onClick = {
+                        mViewModel.disconnectFromLiveKit()
+                        onDismiss()
+                    }) {
+                        Text("Disconnect")
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            mViewModel.connectToLiveKit()
+                        },
+                        enabled = mRoomCodeInput.length == 6,
+                    ) {
+                        Text("Connect")
+                    }
+                }
+            },
+            dismissButton = {
+                Button(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

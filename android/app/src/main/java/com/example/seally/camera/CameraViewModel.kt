@@ -34,6 +34,8 @@ data class CameraUiState(
     val mSelectedExercise: ExerciseType = ExerciseType.SQUAT,
     val mFormFeedback: FormFeedback = FormFeedback(),
     val mLiveKitStatus: String = "LiveKit idle",
+    val mRoomCode: String = "",
+    val mIsLiveKitConnected: Boolean = false,
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,7 +61,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mLastLandmarkSentAtMs: Long = 0L
     private var mFrameCounter: Long = 0L
     private val mLiveKitUrl: String by lazy { readConfigString("livekit_url").trim() }
-    private val mLiveKitToken: String by lazy { readConfigString("livekit_token").trim() }
+    private val mLiveKitApiKey: String by lazy { readConfigString("livekit_api_key").trim() }
+    private val mLiveKitApiSecret: String by lazy { readConfigString("livekit_api_secret").trim() }
     private val mLiveKitLandmarkTopic: String by lazy {
         readConfigString("livekit_landmark_topic").trim().ifBlank {
             DEFAULT_LANDMARK_TOPIC
@@ -97,14 +100,35 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        ensureLiveKitConnected()
-
         if (mPoseLandmarkerHelper == null && !mIsPoseLandmarkerInitializing) {
             initializePoseLandmarker()
             return
         }
 
         mAcceptFrames = !mIsPoseLandmarkerInitializing
+    }
+
+    fun setRoomCode(roomCode: String) {
+        mUiState.update { it.copy(mRoomCode = roomCode.trim().uppercase()) }
+    }
+
+    fun connectToLiveKit() {
+        val roomCode = mUiState.value.mRoomCode
+        if (roomCode.isBlank()) {
+            mUiState.update { it.copy(mLiveKitStatus = "Enter a room code first") }
+            return
+        }
+        ensureLiveKitConnected(roomCode)
+    }
+
+    fun disconnectFromLiveKit() {
+        disconnectLiveKit()
+        mUiState.update {
+            it.copy(
+                mIsLiveKitConnected = false,
+                mLiveKitStatus = "Disconnected",
+            )
+        }
     }
 
     fun preWarmPoseLandmarker() {
@@ -264,6 +288,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update { it.copy(mIsFrontCamera = isFrontCamera) }
     }
 
+    fun setSelectedExercise(mExerciseType: ExerciseType) {
+        val currentState = mUiState.value
+        if (currentState.mSelectedExercise == mExerciseType) return
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
+        mUiState.update {
+            it.copy(
+                mSelectedExercise = mExerciseType,
+                mFormFeedback = FormFeedback(),
+            )
+        }
+    }
+
     fun toggleExerciseMode() {
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
@@ -280,8 +318,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun ensureLiveKitConnected() {
-        if (mLiveKitUrl.isBlank() || mLiveKitToken.isBlank()) {
+    private fun ensureLiveKitConnected(roomCode: String) {
+        if (mLiveKitUrl.isBlank() || mLiveKitApiKey.isBlank() || mLiveKitApiSecret.isBlank()) {
             mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (config missing)") }
             return
         }
@@ -291,18 +329,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update { it.copy(mLiveKitStatus = "LiveKit connecting...") }
         viewModelScope.launch {
             try {
+                val token = com.example.seally.livekit.LiveKitTokenGenerator.generatePublisherToken(
+                    roomCode = roomCode,
+                    apiKey = mLiveKitApiKey,
+                    apiSecret = mLiveKitApiSecret,
+                )
                 mLiveKitPublisher.connect(
                     url = mLiveKitUrl,
-                    token = mLiveKitToken,
+                    token = token,
                 ).onFailure { error ->
                     Log.e(mTag, "LiveKit connection failed", error)
                     mUiState.update {
                         it.copy(
                             mLiveKitStatus = "LiveKit failed: ${error.message ?: "unknown error"}",
+                            mIsLiveKitConnected = false,
                         )
                     }
                 }.onSuccess {
-                    mUiState.update { it.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}") }
+                    mUiState.update {
+                        it.copy(
+                            mIsLiveKitConnected = true,
+                            mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}",
+                        )
+                    }
                 }
             } finally {
                 mIsLiveKitConnecting = false

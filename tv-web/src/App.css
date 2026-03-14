@@ -54,6 +54,29 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.room-code-display {
+  background: #1a1d24;
+  border: 1px solid #4caf50;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.room-code-display .code {
+  font-size: 32px;
+  font-weight: bold;
+  color: #4caf50;
+  letter-spacing: 4px;
+  display: block;
+  margin: 8px 0;
+}
+
+.room-code-display .hint {
+  color: #a8b3c7;
+  font-size: 13px;
+  margin: 0;
+}
+
 .status {
   margin-top: 12px;
   text-align: left;
