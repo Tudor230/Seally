@@ -1,46 +1,32 @@
 package com.example.seally.livekit
 
 import androidx.camera.core.ImageProxy
-import livekit.org.webrtc.CapturerObserver
 import livekit.org.webrtc.JavaI420Buffer
-import livekit.org.webrtc.SurfaceTextureHelper
-import livekit.org.webrtc.VideoCapturer
 import livekit.org.webrtc.VideoFrame
+import io.livekit.android.room.track.video.VideoFrameCapturer
 import java.nio.ByteBuffer
 
-class CameraXFrameCapturer : VideoCapturer {
-    private var mObserver: CapturerObserver? = null
+class CameraXFrameCapturer : VideoFrameCapturer() {
     @Volatile
     private var mIsCapturing: Boolean = false
 
-    override fun initialize(
-        surfaceTextureHelper: SurfaceTextureHelper?,
-        applicationContext: android.content.Context?,
-        capturerObserver: CapturerObserver?,
-    ) {
-        mObserver = capturerObserver
-    }
-
     override fun startCapture(width: Int, height: Int, framerate: Int) {
+        super.startCapture(width, height, framerate)
         mIsCapturing = true
     }
 
     override fun stopCapture() {
+        super.stopCapture()
         mIsCapturing = false
     }
-
-    override fun changeCaptureFormat(width: Int, height: Int, framerate: Int) = Unit
 
     override fun dispose() {
         mIsCapturing = false
-        mObserver = null
+        super.dispose()
     }
-
-    override fun isScreencast(): Boolean = false
 
     fun pushImageProxy(imageProxy: ImageProxy) {
         if (!mIsCapturing) return
-        val observer = mObserver ?: return
         val planes = imageProxy.planes
         if (planes.size < 3) return
 
@@ -60,7 +46,7 @@ class CameraXFrameCapturer : VideoCapturer {
                 imageProxy.imageInfo.rotationDegrees,
                 imageProxy.imageInfo.timestamp.takeIf { it > 0L } ?: System.nanoTime(),
             )
-            observer.onFrameCaptured(frame)
+            pushVideoFrame(frame)
             frame.release()
         } catch (_: Throwable) {
             buffer.release()
@@ -74,6 +60,7 @@ class CameraXFrameCapturer : VideoCapturer {
         destination: ByteBuffer,
     ) {
         val source = plane.buffer.duplicate()
+        source.rewind()
         val rowStride = plane.rowStride
         val pixelStride = plane.pixelStride
 

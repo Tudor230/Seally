@@ -8,6 +8,7 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.seally.livekit.LandmarkPacketEncoder
 import com.example.seally.livekit.LiveKitPublisher
 import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
@@ -19,8 +20,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 data class CameraUiState(
     val mHasCameraPermission: Boolean = false,
@@ -219,14 +218,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
         }
 
-        mLiveKitPublisher.pushVideoFrame(imageProxy)
+        runCatching {
+            mPoseLandmarkerHelper?.detectLiveStreamFrame(imageProxy)
+        }.onFailure { error ->
+            Log.e(mTag, "Pose processing failed", error)
+        }
+        imageProxy.close()
         mFrameCounter += 1L
         if (mFrameCounter % LIVEKIT_STATUS_UPDATE_EVERY_FRAMES == 0L) {
             mUiState.update { it.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}") }
         }
-
-        // Analyzer already runs on a background executor, so avoid hopping back to Main.
-        mPoseLandmarkerHelper?.detectLiveStreamFrame(imageProxy) ?: imageProxy.close()
     }
 
     fun onLensSwitchStarted() {
@@ -321,24 +322,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (nowMs - mLastLandmarkSentAtMs < LANDMARK_SEND_MIN_INTERVAL_MS) return
 
         val state = mUiState.value
-        val payload = JSONObject().apply {
-            put("v", 1)
-            put("seq", mLandmarkSequence++)
-            put("timestampMs", nowMs)
-            put("frameWidth", state.mFrameWidth)
-            put("frameHeight", state.mFrameHeight)
-            put("isFrontCamera", state.mIsFrontCamera)
-            put("landmarks", JSONArray().apply {
-                landmarks.forEach { landmark ->
-                    put(
-                        JSONObject()
-                            .put("x", landmark.x())
-                            .put("y", landmark.y())
-                            .put("z", landmark.z()),
-                    )
-                }
-            })
-        }.toString().encodeToByteArray()
+        val payload = LandmarkPacketEncoder.encode(
+            sequence = mLandmarkSequence,
+            timestampMs = nowMs,
+            frameWidth = state.mFrameWidth,
+            frameHeight = state.mFrameHeight,
+            isFrontCamera = state.mIsFrontCamera,
+            landmarks = landmarks,
+        )
+        mLandmarkSequence += 1L
 
         if (payload.size > MAX_LIVEKIT_DATA_PACKET_BYTES) return
         mLastLandmarkSentAtMs = nowMs
@@ -377,9 +369,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
-        private const val LANDMARK_SEND_MIN_INTERVAL_MS = 66L
+        private const val LANDMARK_SEND_MIN_INTERVAL_MS = 33L
         private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
-        private const val DEFAULT_LANDMARK_TOPIC = "pose.normalized.v1"
+        private const val DEFAULT_LANDMARK_TOPIC = "pose.binary.v2"
         private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
     }
 }

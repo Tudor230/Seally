@@ -4,11 +4,14 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.util.Range
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -198,7 +201,12 @@ fun CameraScreen(
                         surfaceProvider = previewView.surfaceProvider
                     }
 
-                    val imageAnalyzer = ImageAnalysis.Builder()
+                    val imageAnalysisBuilder = ImageAnalysis.Builder()
+                    Camera2Interop.Extender(imageAnalysisBuilder).setCaptureRequestOption(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        Range(TARGET_CAMERA_FPS, TARGET_CAMERA_FPS),
+                    )
+                    val imageAnalyzer = imageAnalysisBuilder
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
@@ -387,6 +395,8 @@ private fun formatDuration(durationMs: Long): String {
     val seconds = totalSeconds % 60L
     return "%02d:%02d".format(minutes, seconds)
 }
+
+private const val TARGET_CAMERA_FPS = 30
 
 private class ErrorSpeechAnnouncer(context: Context) : TextToSpeech.OnInitListener {
     private val mTextToSpeech = TextToSpeech(context.applicationContext, this)
