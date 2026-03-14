@@ -55,7 +55,7 @@ fun ExercisesScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/lilseal.png")
+        .data("file:///android_asset/icons/muscles.png")
         .build()
 
     val calendarIconRequest = ImageRequest.Builder(context)
@@ -67,7 +67,7 @@ fun ExercisesScreen(
         .build()
 
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/background_exercises.png")
+        .data("file:///android_asset/icons/gyim.jpeg")
         .build()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -98,8 +98,8 @@ fun ExercisesScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = 10.dp)
-                .fillMaxHeight(0.92f)
+               // .offset(y = 0.dp)
+                .fillMaxHeight(0.88f)
                 .padding(horizontal = 12.dp)
         )
 

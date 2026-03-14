@@ -37,7 +37,7 @@ fun HomeScreen(
         .build()
 
     val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/lilseal.png")
+        .data("file:///android_asset/icons/muscles.png")
         .build()
 
     // Temporary progress values (wire these to real state later)
@@ -133,19 +133,18 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Character (bigger)
-            AsyncImage(
-                model = skinnyImageRequest,
-                contentDescription = "Character",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxHeight(0.92f)
-                    .padding(horizontal = 12.dp)
-            )
         }
+
+        // Keep character anchoring consistent with ExercisesScreen.
+        AsyncImage(
+            model = skinnyImageRequest,
+            contentDescription = "Character",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxHeight(0.88f)
+                .padding(horizontal = 12.dp)
+        )
     }
 }
 
