@@ -2,6 +2,7 @@ package com.example.seally.camera
 
 data class FormFeedback(
     val mPrimaryCue: String? = null,
+    val mSpeechCue: String? = null,
     val mStatus: ExerciseStatus = ExerciseStatus.INITIALIZING,
     val mRepCount: Int = 0,
     val mCurrentPhase: MovementPhase = MovementPhase.STANDING,
@@ -43,10 +44,12 @@ data class PullUpBarCalibration(
 
 enum class BodySide(
     val mShoulder: Int,
+    val mElbow: Int,
+    val mWrist: Int,
     val mHip: Int,
     val mKnee: Int,
     val mAnkle: Int,
 ) {
-    LEFT(11, 23, 25, 27),
-    RIGHT(12, 24, 26, 28),
+    LEFT(11, 13, 15, 23, 25, 27),
+    RIGHT(12, 14, 16, 24, 26, 28),
 }

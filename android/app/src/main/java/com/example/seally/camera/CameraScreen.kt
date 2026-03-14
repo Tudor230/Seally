@@ -1,10 +1,12 @@
 package com.example.seally.camera
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -57,6 +59,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.math.max
 
@@ -138,6 +141,21 @@ fun CameraScreen(
             modifier = modifier.fillMaxSize(),
         )
         return
+    }
+
+    val mMessageToAnnounce = uiState.mErrorMessage
+        ?: uiState.mFormFeedback.mErrorMessage
+        ?: uiState.mFormFeedback.mSpeechCue
+    val mErrorSpeechAnnouncer = remember(context) { ErrorSpeechAnnouncer(context) }
+
+    LaunchedEffect(mMessageToAnnounce) {
+        mErrorSpeechAnnouncer.onErrorMessage(mMessageToAnnounce)
+    }
+
+    DisposableEffect(mErrorSpeechAnnouncer) {
+        onDispose {
+            mErrorSpeechAnnouncer.release()
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -373,6 +391,60 @@ private fun formatDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return "%02d:%02d".format(minutes, seconds)
+}
+
+private class ErrorSpeechAnnouncer(context: Context) : TextToSpeech.OnInitListener {
+    private val mTextToSpeech = TextToSpeech(context.applicationContext, this)
+    private var mIsReady = false
+    private var mPendingErrorMessage: String? = null
+    private var mLastAnnouncedErrorMessage: String? = null
+
+    override fun onInit(status: Int) {
+        if (status != TextToSpeech.SUCCESS) return
+
+        val languageResult = mTextToSpeech.setLanguage(Locale.getDefault())
+        if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            return
+        }
+
+        mIsReady = true
+        val pendingMessage = mPendingErrorMessage
+        if (pendingMessage != null) {
+            speakError(pendingMessage)
+            mPendingErrorMessage = null
+        }
+    }
+
+    fun onErrorMessage(message: String?) {
+        val normalizedMessage = message
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+        if (normalizedMessage == null) {
+            mLastAnnouncedErrorMessage = null
+            return
+        }
+
+        if (normalizedMessage == mLastAnnouncedErrorMessage) return
+
+        if (!mIsReady) {
+            mPendingErrorMessage = normalizedMessage
+            return
+        }
+
+        speakError(normalizedMessage)
+    }
+
+    fun release() {
+        mTextToSpeech.stop()
+        mTextToSpeech.shutdown()
+    }
+
+    private fun speakError(message: String) {
+        val utteranceId = "error_${message.hashCode()}"
+        mTextToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        mLastAnnouncedErrorMessage = message
+    }
 }
 
 @Composable
