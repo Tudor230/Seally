@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -16,6 +20,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.seally.calendar.CalendarScreen
 
 @Composable
 fun ExercisesScreen(
@@ -23,6 +28,16 @@ fun ExercisesScreen(
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
 ) {
+    var showCalendar by remember { mutableStateOf(false) }
+
+    if (showCalendar) {
+        CalendarScreen(
+            modifier = modifier,
+            onBackClick = { showCalendar = false },
+        )
+        return
+    }
+
     val context = LocalContext.current
 
     val headerImageRequest = ImageRequest.Builder(context)
@@ -41,7 +56,20 @@ fun ExercisesScreen(
         .data("file:///android_asset/icons/dumbbell_icon - no background.png")
         .build()
 
+    val backgroundRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/background_exercises.png")
+        .build()
+
     Box(modifier = modifier.fillMaxSize()) {
+        // Background image
+        AsyncImage(
+            model = backgroundRequest,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alpha = 0.65f,
+            modifier = Modifier.fillMaxSize(),
+        )
+
         // Top header image (same style as Home)
         AsyncImage(
             model = headerImageRequest,
@@ -49,7 +77,7 @@ fun ExercisesScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = 95.dp)
+                .offset(y = 40.dp)
                 .size(220.dp),
         )
 
@@ -59,9 +87,9 @@ fun ExercisesScreen(
             contentDescription = "Seal",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(y = (-120).dp)
-                .size(340.dp),
+                .align(Alignment.BottomStart)
+                .padding(start = 40.dp, bottom = 150.dp)
+                .size(260.dp),
         )
 
         // Two action buttons bottom-left / bottom-right of the seal, above the nav bar
@@ -69,7 +97,7 @@ fun ExercisesScreen(
             onClick = onLeftActionClick,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 110.dp)
+                .padding(start = 24.dp, bottom = 60.dp)
                 .semantics { contentDescription = "Dumbbell" },
         ) {
             AsyncImage(
@@ -81,10 +109,13 @@ fun ExercisesScreen(
         }
 
         IconButton(
-            onClick = onRightActionClick,
+            onClick = {
+                onRightActionClick()
+                showCalendar = true
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 110.dp)
+                .padding(end = 24.dp, bottom = 60.dp)
                 .semantics { contentDescription = "Calendar" },
         ) {
             AsyncImage(
