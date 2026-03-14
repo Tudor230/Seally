@@ -10,8 +10,10 @@ class ExerciseLogRepository(context: Context) {
     private val mDao = AppDatabase.getInstance(context).exerciseLogDao()
 
     fun observeByDate(date: String): Flow<List<ExerciseLogEntity>> = mDao.observeByDate(date)
+    fun observeAll(): Flow<List<ExerciseLogEntity>> = mDao.observeAll()
 
     suspend fun getRecent(limit: Int = 50): List<ExerciseLogEntity> = mDao.getRecent(limit)
+    suspend fun deleteByDate(date: String) = mDao.deleteByDate(date)
 
     suspend fun addLog(
         exerciseName: String,
