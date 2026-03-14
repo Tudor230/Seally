@@ -1,120 +1,156 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Room, RoomEvent, Track } from 'livekit-client'
 import './App.css'
 
+const LANDMARK_TOPIC = import.meta.env.VITE_LIVEKIT_LANDMARK_TOPIC || 'pose.normalized.v1'
+const FORCE_RELAY = (import.meta.env.VITE_LIVEKIT_FORCE_RELAY || 'true') !== 'false'
+
 function App() {
-  const [count, setCount] = useState(0)
+  const [mUrl, setMUrl] = useState(import.meta.env.VITE_LIVEKIT_URL || '')
+  const [mToken, setMToken] = useState(import.meta.env.VITE_LIVEKIT_TOKEN || '')
+  const [mStatus, setMStatus] = useState('Disconnected')
+  const [mError, setMError] = useState('')
+  const [mDebug, setMDebug] = useState('No remote publications.')
+  const [mLandmarkSeq, setMLandmarkSeq] = useState(null)
+  const [mLandmarkCount, setMLandmarkCount] = useState(0)
+  const [mRoom, setMRoom] = useState(null)
+  const mVideoContainerRef = useRef(null)
+  const mDecoder = useMemo(() => new TextDecoder(), [])
+
+  useEffect(() => {
+    return () => {
+      mRoom?.disconnect()
+    }
+  }, [mRoom])
+
+  const attachVideo = (track) => {
+    const element = track.attach()
+    element.className = 'remote-video'
+    element.autoplay = true
+    element.playsInline = true
+    if (mVideoContainerRef.current) {
+      mVideoContainerRef.current.replaceChildren(element)
+    }
+    element.play?.().catch(() => {})
+    setMStatus('Connected (video subscribed)')
+  }
+
+  const inspectPublications = (room) => {
+    const lines = []
+    for (const participant of room.remoteParticipants.values()) {
+      for (const publication of participant.trackPublications.values()) {
+        lines.push(
+          `${participant.identity} ${publication.kind} ${publication.isSubscribed ? 'subscribed' : 'pending'}`,
+        )
+        if (publication.kind === Track.Kind.Video) {
+          publication.setSubscribed(true)
+          if (publication.videoTrack) {
+            attachVideo(publication.videoTrack)
+          }
+        }
+      }
+    }
+    setMDebug(lines.length ? lines.join(' | ') : 'No remote publications.')
+  }
+
+  const handleConnect = async () => {
+    if (!mUrl.trim() || !mToken.trim()) {
+      setMError('Missing URL/token.')
+      return
+    }
+
+    setMError('')
+    setMStatus('Connecting...')
+
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      rtcConfig: FORCE_RELAY ? { iceTransportPolicy: 'relay' } : undefined,
+    })
+
+    room.on(RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === Track.Kind.Video) {
+        attachVideo(track)
+      }
+    })
+
+    room.on(RoomEvent.TrackPublished, (publication) => {
+      if (publication.kind === Track.Kind.Video) {
+        publication.setSubscribed(true)
+      }
+    })
+
+    room.on(RoomEvent.ParticipantConnected, () => {
+      inspectPublications(room)
+    })
+
+    room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      if (topic !== LANDMARK_TOPIC) return
+      try {
+        const data = JSON.parse(mDecoder.decode(payload))
+        setMLandmarkSeq(data.seq ?? null)
+        setMLandmarkCount(Array.isArray(data.landmarks) ? data.landmarks.length : 0)
+        setMStatus(`Connected (landmarks from ${participant?.identity || 'unknown'})`)
+      } catch (error) {
+        setMError(`Invalid landmark payload: ${error.message}`)
+      }
+    })
+
+    room.on(RoomEvent.Disconnected, () => {
+      setMStatus('Disconnected')
+      setMDebug('No remote publications.')
+    })
+
+    try {
+      await room.connect(mUrl.trim(), mToken.trim())
+      setMRoom(room)
+      setMStatus('Connected (waiting for video/data)')
+      inspectPublications(room)
+    } catch (error) {
+      setMError(`Connect failed: ${error.message}`)
+      setMStatus('Disconnected')
+      room.disconnect()
+    }
+  }
+
+  const handleDisconnect = () => {
+    mRoom?.disconnect()
+    setMRoom(null)
+    setMStatus('Disconnected')
+    setMDebug('No remote publications.')
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <main className="page">
+      <h1>Seally LiveKit Receiver</h1>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+      <section className="panel">
+        <label>
+          LiveKit URL
+          <input value={mUrl} onChange={(event) => setMUrl(event.target.value)} />
+        </label>
+        <label>
+          Viewer token
+          <textarea value={mToken} onChange={(event) => setMToken(event.target.value)} />
+        </label>
+        <div className="actions">
+          <button disabled={!!mRoom} onClick={handleConnect}>Connect</button>
+          <button disabled={!mRoom} onClick={handleDisconnect}>Disconnect</button>
         </div>
       </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <section className="status">
+        <p><strong>Status:</strong> {mStatus}</p>
+        <p><strong>Topic:</strong> {LANDMARK_TOPIC}</p>
+        <p><strong>Landmarks:</strong> seq={mLandmarkSeq ?? '-'} count={mLandmarkCount}</p>
+        <p className="debug">{mDebug}</p>
+        {mError && <p className="error">{mError}</p>}
+      </section>
+
+      <section className="video-stage">
+        <div ref={mVideoContainerRef} className="video-container" />
+      </section>
+    </main>
   )
 }
 

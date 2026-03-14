@@ -2,11 +2,13 @@ package com.example.seally.camera
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.seally.livekit.LiveKitPublisher
 import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class CameraUiState(
     val mHasCameraPermission: Boolean = false,
@@ -34,9 +38,11 @@ data class CameraUiState(
     val mPullUpBarRightX: Float? = null,
     val mPullUpBarRightY: Float? = null,
     val mFormFeedback: FormFeedback = FormFeedback(),
+    val mLiveKitStatus: String = "LiveKit idle",
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
+    private val mTag = "CameraViewModel"
     private val mUiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = mUiState.asStateFlow()
 
@@ -52,6 +58,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mCurrentLensSwitchToken: Int = 0
     private var mPendingLensSwitchToken: Int? = null
     private var mHasAttemptedWarmup: Boolean = false
+    private val mLiveKitPublisher = LiveKitPublisher(getApplication())
+    private var mIsLiveKitConnecting: Boolean = false
+    private var mHasShownLiveKitConfigError: Boolean = false
+    private var mLandmarkSequence: Long = 0L
+    private var mLastLandmarkSentAtMs: Long = 0L
+    private var mFrameCounter: Long = 0L
+    private val mLiveKitUrl: String by lazy { readConfigString("livekit_url").trim() }
+    private val mLiveKitToken: String by lazy { readConfigString("livekit_token").trim() }
+    private val mLiveKitLandmarkTopic: String by lazy {
+        readConfigString("livekit_landmark_topic").trim().ifBlank {
+            DEFAULT_LANDMARK_TOPIC
+        }
+    }
 
     fun setCameraPermission(hasPermission: Boolean, isInitialCheck: Boolean) {
         val currentState = mUiState.value
@@ -75,12 +94,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mPoseLandmarkerHelper?.clear()
             mPoseLandmarkerHelper = null
             mIsPoseLandmarkerInitializing = false
+            disconnectLiveKit()
             mSquatFormFeedbackEngine.reset()
             mPlankFormFeedbackEngine.reset()
             mPullUpFormFeedbackEngine.reset()
             mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (no camera permission)") }
             return
         }
+
+        ensureLiveKitConnected()
 
         if (mPoseLandmarkerHelper == null && !mIsPoseLandmarkerInitializing) {
             initializePoseLandmarker()
@@ -136,10 +159,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                                     it.copy(
                                         mLandmarks = firstPose,
                                         mWorldLandmarks = firstPoseWorld,
-                                        mErrorMessage = null,
                                         mFormFeedback = feedback,
                                     )
                                 }
+                                maybePublishLandmarks(firstPose)
                             }
                         },
                         mErrorListener = { message ->
@@ -200,6 +223,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val currentState = mUiState.value
         if (currentState.mFrameWidth != frameWidth || currentState.mFrameHeight != frameHeight) {
             mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
+        }
+
+        mLiveKitPublisher.pushVideoFrame(imageProxy)
+        mFrameCounter += 1L
+        if (mFrameCounter % LIVEKIT_STATUS_UPDATE_EVERY_FRAMES == 0L) {
+            mUiState.update { it.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}") }
         }
 
         // Analyzer already runs on a background executor, so avoid hopping back to Main.
@@ -309,12 +338,104 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun ensureLiveKitConnected() {
+        if (mLiveKitUrl.isBlank() || mLiveKitToken.isBlank()) {
+            if (!mHasShownLiveKitConfigError) {
+                mUiState.update {
+                    it.copy(
+                        mErrorMessage = "LiveKit config missing: set LIVEKIT_URL and LIVEKIT_TOKEN in gradle.properties.",
+                    )
+                }
+                mHasShownLiveKitConfigError = true
+            }
+            return
+        }
+
+        if (mIsLiveKitConnecting) return
+        mIsLiveKitConnecting = true
+        mUiState.update { it.copy(mLiveKitStatus = "LiveKit connecting...") }
+        viewModelScope.launch {
+            try {
+                mLiveKitPublisher.connect(
+                    url = mLiveKitUrl,
+                    token = mLiveKitToken,
+                ).onFailure { error ->
+                    Log.e(mTag, "LiveKit connection failed", error)
+                    mUiState.update {
+                        it.copy(
+                            mErrorMessage = "LiveKit connection failed: ${error.message ?: "unknown error"}",
+                            mLiveKitStatus = "LiveKit failed: ${error.message ?: "unknown error"}",
+                        )
+                    }
+                }.onSuccess {
+                    mUiState.update { it.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}") }
+                }
+            } finally {
+                mIsLiveKitConnecting = false
+            }
+        }
+    }
+
+    private fun disconnectLiveKit() {
+        mLandmarkSequence = 0L
+        mLastLandmarkSentAtMs = 0L
+        mFrameCounter = 0L
+        mLiveKitPublisher.disconnect()
+    }
+
+    private fun maybePublishLandmarks(landmarks: List<NormalizedLandmark>) {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (nowMs - mLastLandmarkSentAtMs < LANDMARK_SEND_MIN_INTERVAL_MS) return
+
+        val state = mUiState.value
+        val payload = JSONObject().apply {
+            put("v", 1)
+            put("seq", mLandmarkSequence++)
+            put("timestampMs", nowMs)
+            put("frameWidth", state.mFrameWidth)
+            put("frameHeight", state.mFrameHeight)
+            put("isFrontCamera", state.mIsFrontCamera)
+            put("landmarks", JSONArray().apply {
+                landmarks.forEach { landmark ->
+                    put(
+                        JSONObject()
+                            .put("x", landmark.x())
+                            .put("y", landmark.y())
+                            .put("z", landmark.z()),
+                    )
+                }
+            })
+        }.toString().encodeToByteArray()
+
+        if (payload.size > MAX_LIVEKIT_DATA_PACKET_BYTES) return
+        mLastLandmarkSentAtMs = nowMs
+
+        viewModelScope.launch {
+            mLiveKitPublisher.publishLandmarks(
+                payload = payload,
+                topic = mLiveKitLandmarkTopic,
+            ).onFailure {
+                mUiState.update { state ->
+                    state.copy(mLiveKitStatus = "LiveKit ${mLiveKitPublisher.getDebugStatus()}")
+                }
+            }
+        }
+    }
+
+    private fun readConfigString(resourceName: String): String {
+        val application = getApplication<Application>()
+        val resourceId = application.resources.getIdentifier(resourceName, "string", application.packageName)
+        if (resourceId == 0) return ""
+        return application.getString(resourceId)
+    }
+
     override fun onCleared() {
         mAcceptFrames = false
         mSuppressLandmarkResults = false
         mPendingLensSwitchToken = null
         mPoseLandmarkerHelper?.clear()
         mPoseLandmarkerHelper = null
+        disconnectLiveKit()
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
@@ -323,6 +444,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
+        private const val LANDMARK_SEND_MIN_INTERVAL_MS = 66L
+        private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
+        private const val DEFAULT_LANDMARK_TOPIC = "pose.normalized.v1"
+        private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
     }
 }
 
