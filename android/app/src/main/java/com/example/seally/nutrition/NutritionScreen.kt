@@ -2,53 +2,40 @@ package com.example.seally.nutrition
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocalDrink
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -59,11 +46,11 @@ private enum class NutritionPage {
     Camera,
 }
 
-private enum class MealType(val label: String) {
-    Breakfast("Breakfast"),
-    Lunch("Lunch"),
-    Snack("Snack"),
-    Dinner("Dinner"),
+private enum class MealType(val label: String, val icon: String) {
+    Breakfast("Breakfast", "🍳"),
+    Lunch("Lunch", "🍱"),
+    Snack("Snack", "🍎"),
+    Dinner("Dinner", "🍛"),
 }
 
 private enum class ScannedQuantityOption(val label: String) {
@@ -136,7 +123,18 @@ fun NutritionScreen(
         onDispose {}
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                )
+            )
+    ) {
         when (currentPage) {
             NutritionPage.Kitchen -> KitchenMainPage(
                 caloriesConsumed = caloriesConsumed,
@@ -199,44 +197,149 @@ private fun KitchenMainPage(
     onOpenFood: () -> Unit,
     onOpenWater: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val skinnyImageRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/skinny - no background.png")
+        .build()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            TopMetric(
-                label = "Calories",
-                value = "$caloriesConsumed / $calorieTarget kcal",
-                progress = (caloriesConsumed.toFloat() / calorieTarget).coerceIn(0f, 1f),
-                reverse = false,
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                StatCard(
+                    label = "Calories",
+                    value = "$caloriesConsumed",
+                    target = "$calorieTarget",
+                    unit = "kcal",
+                    progress = (caloriesConsumed.toFloat() / calorieTarget).coerceIn(0f, 1f),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenFood
+                )
+                StatCard(
+                    label = "Water",
+                    value = "$waterConsumedMl",
+                    target = "$waterTargetMl",
+                    unit = "ml",
+                    progress = (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f),
+                    color = Color(0xFF34A9FF),
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenWater
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            AsyncImage(
+                model = skinnyImageRequest,
+                contentDescription = "Character",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .aspectRatio(1f)
+                    .align(Alignment.CenterHorizontally)
             )
-            TopMetric(
-                label = "Water",
-                value = "$waterConsumedMl / $waterTargetMl ml",
-                progress = (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f),
-                reverse = true,
-            )
+
+            Spacer(modifier = Modifier.weight(1f))
         }
 
-        PlaceholderImage(
-            modifier = Modifier.align(Alignment.Center),
-        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally)
+        ) {
+            FloatingActionButton(
+                onClick = onOpenFood,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Icon(Icons.Default.Restaurant, contentDescription = "Food", modifier = Modifier.size(32.dp))
+            }
 
-        IconOnlyActionButton(
-            onClick = onOpenFood,
-            iconGlyph = "🍽️",
-            modifier = Modifier.align(Alignment.BottomStart),
-        )
+            FloatingActionButton(
+                onClick = onOpenWater,
+                containerColor = Color(0xFFD1E9FF),
+                contentColor = Color(0xFF0066CC),
+                shape = CircleShape,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Icon(Icons.Default.LocalDrink, contentDescription = "Water", modifier = Modifier.size(32.dp))
+            }
+        }
+    }
+}
 
-        IconOnlyActionButton(
-            onClick = onOpenWater,
-            iconGlyph = "💧",
-            modifier = Modifier.align(Alignment.BottomEnd),
-        )
+@Composable
+private fun StatCard(
+    label: String,
+    value: String,
+    target: String,
+    unit: String,
+    progress: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Text(
+                    text = " $unit",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(CircleShape),
+                color = color,
+                trackColor = color.copy(alpha = 0.2f),
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Target: $target",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -259,21 +362,18 @@ private fun FoodTrackingPage(
     onOpenCamera: () -> Unit,
     onManualAddFood: (FoodEntry) -> Unit,
 ) {
-    var shouldShowAddFoodDialog by rememberSaveable { mutableStateOf(false) }
+    var shouldShowAddFoodSheet by rememberSaveable { mutableStateOf(false) }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 104.dp),
+                .padding(horizontal = 20.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
@@ -284,113 +384,291 @@ private fun FoodTrackingPage(
                 }
                 Text(
                     text = "Food Tracking",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    MacroOverviewPanel(
+                        caloriesConsumed, calorieTarget,
+                        proteinConsumed, proteinTarget,
+                        carbsConsumed, carbsTarget,
+                        fatsConsumed, fatTarget,
+                        sugarsConsumed, sugarTarget,
+                        fibersConsumed, fiberTarget
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                item {
+                    Text(
+                        text = "Today's Meals",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
 
-            NutritionPanel(title = "Calories & Macros") {
-                Text("$caloriesConsumed / $calorieTarget kcal")
-                Spacer(modifier = Modifier.height(8.dp))
-                ReversibleTracker(
-                    progress = (caloriesConsumed.toFloat() / calorieTarget).coerceIn(0f, 1f),
-                    reverse = false,
-                    modifier = Modifier.width(220.dp),
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                MacroLine("Protein", proteinConsumed, proteinTarget)
-                MacroLine("Carbs", carbsConsumed, carbsTarget)
-                MacroLine("Fats", fatsConsumed, fatTarget)
-                MacroLine("Sugars", sugarsConsumed, sugarTarget)
-                MacroLine("Fibers", fibersConsumed, fiberTarget)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Consumed foods",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            MealType.entries.forEach { mealType ->
-                val mealFoods = foods.filter { it.meal == mealType }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                            shape = RoundedCornerShape(14.dp),
-                        )
-                        .padding(12.dp),
-                ) {
-                    Column {
-                        Text(
-                            text = mealType.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        if (mealFoods.isEmpty()) {
-                            Text(
-                                text = "No entries yet",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        } else {
-                            mealFoods.forEach { food ->
-                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Text(food.name, modifier = Modifier.weight(1f))
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text("${food.calories} kcal")
-                                    }
-                                    Text(
-                                        text = "P ${food.protein}g • C ${food.carbs}g • F ${food.fats}g • S ${food.sugars}g • Fi ${food.fibers}g",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
+                items(MealType.entries) { mealType ->
+                    MealCard(
+                        mealType = mealType,
+                        mealFoods = foods.filter { it.meal == mealType },
+                        onAddClick = {
+                            shouldShowAddFoodSheet = true
                         }
-                    }
+                    )
                 }
             }
         }
 
+        // Action Buttons
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End,
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            IconOnlyActionButton(
+            FloatingActionButton(
                 onClick = onOpenCamera,
-                iconGlyph = "📷",
-            )
-            IconOnlyActionButton(
-                onClick = { shouldShowAddFoodDialog = true },
-                iconGlyph = "✍️",
-            )
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "Scan Label")
+            }
+            FloatingActionButton(
+                onClick = { shouldShowAddFoodSheet = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Manually")
+            }
         }
     }
 
-    if (shouldShowAddFoodDialog) {
-        AddFoodDialog(
-            onDismiss = { shouldShowAddFoodDialog = false },
+    if (shouldShowAddFoodSheet) {
+        AddFoodSheet(
+            onDismiss = { shouldShowAddFoodSheet = false },
             onAddFood = { food ->
                 onManualAddFood(food)
-                shouldShowAddFoodDialog = false
+                shouldShowAddFoodSheet = false
             },
         )
+    }
+}
+
+@Composable
+private fun MacroOverviewPanel(
+    calories: Int, calorieTarget: Int,
+    protein: Int, proteinTarget: Int,
+    carbs: Int, carbsTarget: Int,
+    fats: Int, fatTarget: Int,
+    sugars: Int, sugarTarget: Int,
+    fibers: Int, fiberTarget: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Calories",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$calories",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = " / $calorieTarget kcal",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+                }
+                
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
+                    CircularProgressIndicator(
+                        progress = { (calories.toFloat() / calorieTarget).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxSize(),
+                        strokeWidth = 8.dp,
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    )
+                    Text(
+                        text = "${(calories.toFloat() / calorieTarget * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MacroMiniStat("Protein", protein, proteinTarget, Color(0xFFE91E63))
+                MacroMiniStat("Carbs", carbs, carbsTarget, Color(0xFF4CAF50))
+                MacroMiniStat("Fats", fats, fatTarget, Color(0xFFFF9800))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SecondaryMacroStat("Sugars", sugars, sugarTarget, modifier = Modifier.weight(1f))
+                SecondaryMacroStat("Fibers", fibers, fiberTarget, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MacroMiniStat(label: String, value: Int, target: Int, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(56.dp)) {
+            CircularProgressIndicator(
+                progress = { (value.toFloat() / target).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxSize(),
+                color = color,
+                strokeWidth = 6.dp,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                trackColor = color.copy(alpha = 0.1f)
+            )
+            Text(
+                text = "${value}g",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun SecondaryMacroStat(label: String, value: Int, target: Int, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium)
+            Text(text = "$value / $target g", style = MaterialTheme.typography.labelSmall)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = { (value.toFloat() / target).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun MealCard(
+    mealType: MealType,
+    mealFoods: List<FoodEntry>,
+    onAddClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(text = mealType.icon, fontSize = 20.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = mealType.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val totalCals = mealFoods.sumOf { it.calories }
+                        Text(
+                            text = "$totalCals kcal",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                IconButton(onClick = onAddClick) {
+                    Icon(Icons.Default.Add, contentDescription = "Add to ${mealType.label}")
+                }
+            }
+
+            if (mealFoods.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                mealFoods.forEach { food ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = food.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "P ${food.protein}g • C ${food.carbs}g • F ${food.fats}g",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "${food.calories} kcal",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -401,16 +679,24 @@ private fun WaterTrackingPage(
     onBack: () -> Unit,
     onAddWater: (Int) -> Unit,
 ) {
+    val context = LocalContext.current
+    val waterSvgRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/icons/water_glass_icon.svg")
+        .decoderFactory(SvgDecoder.Factory())
+        .build()
+
     val quantities = listOf(150, 250, 500)
     var selectedQuantity by rememberSaveable { mutableIntStateOf(250) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -420,50 +706,112 @@ private fun WaterTrackingPage(
                 )
             }
             Text(
-                text = "Water Tracking",
-                style = MaterialTheme.typography.titleLarge,
+                text = "Water Intake",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        PlaceholderImage(
+        Box(
             modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .width(210.dp),
-        )
+                .fillMaxWidth()
+                .height(300.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier.size(260.dp),
+                shape = CircleShape,
+                color = Color(0xFFE3F2FD).copy(alpha = 0.5f)
+            ) {}
+            
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AsyncImage(
+                    model = waterSvgRequest,
+                    contentDescription = "Water Glass",
+                    modifier = Modifier.size(160.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "$waterConsumedMl / $waterTargetMl ml",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF0288D1)
+                )
+                Text(
+                    text = "Daily Goal",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF0288D1).copy(alpha = 0.7f)
+                )
+            }
 
-        Spacer(modifier = Modifier.height(14.dp))
+            CircularProgressIndicator(
+                progress = { (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f) },
+                modifier = Modifier.size(280.dp),
+                color = Color(0xFF03A9F4),
+                strokeWidth = 12.dp,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                trackColor = Color(0xFFB3E5FC).copy(alpha = 0.3f)
+            )
+        }
 
-        NutritionPanel(title = "Water quantity") {
-            Text("$waterConsumedMl / $waterTargetMl ml")
-            Spacer(modifier = Modifier.height(8.dp))
-            ReversibleTracker(
-                progress = (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f),
-                reverse = false,
-                modifier = Modifier.width(220.dp),
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            )
-            {
-                quantities.forEach { quantity ->
-                    FilterChip(
-                        selected = selectedQuantity == quantity,
-                        onClick = { selectedQuantity = quantity },
-                        label = { Text("$quantity ml") },
-                    )
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Select Amount",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    quantities.forEach { quantity ->
+                        val isSelected = selectedQuantity == quantity
+                        Surface(
+                            onClick = { selectedQuantity = quantity },
+                            modifier = Modifier.weight(1f).height(64.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isSelected) Color(0xFF03A9F4) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "$quantity\nml",
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    lineHeight = 16.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = { onAddWater(selectedQuantity) },
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03A9F4))
+                ) {
+                    Icon(Icons.Default.LocalDrink, contentDescription = null)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Add Water", style = MaterialTheme.typography.titleMedium)
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
-            IconOnlyActionButton(
-                onClick = { onAddWater(selectedQuantity) },
-                iconGlyph = "💧",
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
         }
     }
 }
@@ -482,7 +830,7 @@ private fun CameraTrackingPage(
     )
 
     mScannedResult?.let { scannedResult ->
-        AddScannedFoodDialog(
+        AddScannedFoodSheet(
             suggestion = scannedResult,
             onDismiss = { mScannedResult = null },
             onAddFood = { newFood ->
@@ -493,168 +841,14 @@ private fun CameraTrackingPage(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MacroLine(
-    label: String,
-    value: Int,
-    target: Int,
-) {
-    Column(modifier = Modifier.padding(bottom = 4.dp)) {
-        Text("$label: $value / $target g")
-        ReversibleTracker(
-            progress = (value.toFloat() / target).coerceIn(0f, 1f),
-            reverse = false,
-            modifier = Modifier.width(220.dp),
-        )
-    }
-}
-
-@Composable
-private fun TopMetric(
-    label: String,
-    value: String,
-    progress: Float,
-    reverse: Boolean,
-) {
-    Column(
-        horizontalAlignment = if (reverse) Alignment.End else Alignment.Start,
-    ) {
-        Text(text = label, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(4.dp))
-        ReversibleTracker(progress = progress, reverse = reverse)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = if (reverse) TextAlign.End else TextAlign.Start,
-            modifier = Modifier.width(145.dp),
-        )
-    }
-}
-
-@Composable
-private fun ReversibleTracker(
-    progress: Float,
-    reverse: Boolean,
-    modifier: Modifier = Modifier.width(145.dp),
-) {
-    Box(
-        modifier = modifier
-            .height(10.dp)
-            .clip(RoundedCornerShape(99.dp))
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(99.dp),
-            ),
-    ) {
-        Box(
-            modifier = Modifier
-                .align(if (reverse) Alignment.CenterEnd else Alignment.CenterStart)
-                .fillMaxWidth(progress)
-                .height(10.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(MaterialTheme.colorScheme.primary),
-        )
-    }
-}
-
-@Composable
-private fun PlaceholderImage(
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(20.dp))
-            .border(
-                width = 1.5.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(20.dp),
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "PLACEHOLDER IMAGE",
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun IconOnlyActionButton(
-    onClick: () -> Unit,
-    iconGlyph: String,
-    modifier: Modifier = Modifier,
-) {
-    val isDarkMode = androidx.compose.foundation.isSystemInDarkTheme()
-    val containerColor = if (isDarkMode) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val contentColor = if (isDarkMode) {
-        MaterialTheme.colorScheme.surface
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    Button(
-        onClick = onClick,
-        modifier = modifier.size(68.dp),
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentColor,
-        ),
-        contentPadding = PaddingValues(0.dp),
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = iconGlyph,
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
-}
-
-@Composable
-private fun NutritionPanel(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                shape = RoundedCornerShape(16.dp),
-            )
-            .padding(12.dp),
-    ) {
-        Text(
-            text = title,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        content()
-    }
-}
-
-@Composable
-private fun AddFoodDialog(
+private fun AddFoodSheet(
     onDismiss: () -> Unit,
     onAddFood: (FoodEntry) -> Unit,
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    
     var selectedMeal by rememberSaveable { mutableStateOf(MealType.Breakfast) }
     var name by rememberSaveable { mutableStateOf("") }
     var caloriesText by rememberSaveable { mutableStateOf("") }
@@ -664,71 +858,108 @@ private fun AddFoodDialog(
     var sugarsText by rememberSaveable { mutableStateOf("") }
     var fibersText by rememberSaveable { mutableStateOf("") }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Add food") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    label = { Text("Food name") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                MealTypeSelector(
-                    selectedMeal = selectedMeal,
-                    onMealSelected = { selectedMeal = it },
-                )
-                OutlinedTextField(
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 48.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(
+                text = "Add Food Manually",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Food Name") },
+                placeholder = { Text("e.g. Scrambled Eggs") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
+
+            Column {
+                Text(text = "Select Meal", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(MealType.entries) { meal ->
+                        FilterChip(
+                            selected = selectedMeal == meal,
+                            onClick = { selectedMeal = meal },
+                            label = { Text(meal.label) },
+                            leadingIcon = if (selectedMeal == meal) {
+                                { Text(meal.icon) }
+                            } else null,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(text = "Nutrition Facts", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                NutritionField(
                     value = caloriesText,
                     onValueChange = { caloriesText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Calories") },
-                    modifier = Modifier.fillMaxWidth(),
+                    label = "Calories",
+                    unit = "kcal",
+                    modifier = Modifier.weight(1f)
                 )
-                OutlinedTextField(
+                NutritionField(
                     value = proteinText,
                     onValueChange = { proteinText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Protein (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = carbsText,
-                    onValueChange = { carbsText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Carbs (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = fatsText,
-                    onValueChange = { fatsText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Fats (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = sugarsText,
-                    onValueChange = { sugarsText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Sugars (g)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = fibersText,
-                    onValueChange = { fibersText = it.filter(Char::isDigit) },
-                    singleLine = true,
-                    label = { Text("Fibers (g)") },
-                    modifier = Modifier.fillMaxWidth(),
+                    label = "Protein",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
                 )
             }
-        },
-        confirmButton = {
-            TextButton(
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                NutritionField(
+                    value = carbsText,
+                    onValueChange = { carbsText = it.filter(Char::isDigit) },
+                    label = "Carbs",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+                NutritionField(
+                    value = fatsText,
+                    onValueChange = { fatsText = it.filter(Char::isDigit) },
+                    label = "Fats",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                NutritionField(
+                    value = sugarsText,
+                    onValueChange = { sugarsText = it.filter(Char::isDigit) },
+                    label = "Sugars",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+                NutritionField(
+                    value = fibersText,
+                    onValueChange = { fibersText = it.filter(Char::isDigit) },
+                    label = "Fibers",
+                    unit = "g",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Button(
                 onClick = {
                     val calories = caloriesText.toIntOrNull() ?: 0
                     val protein = proteinText.toIntOrNull() ?: 0
@@ -749,24 +980,46 @@ private fun AddFoodDialog(
                     )
                     onAddFood(food)
                 },
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Add")
+                Text("Add Food Entry", style = MaterialTheme.typography.titleMedium)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
-private fun AddScannedFoodDialog(
+private fun NutritionField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    unit: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        suffix = { Text(unit, style = MaterialTheme.typography.bodySmall) },
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+        )
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddScannedFoodSheet(
     suggestion: NutritionLabelScanResult,
     onDismiss: () -> Unit,
     onAddFood: (FoodEntry) -> Unit,
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     var selectedMeal by rememberSaveable(suggestion.recognizedText) { mutableStateOf(MealType.Lunch) }
     var name by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.name) }
     var selectedQuantityOption by rememberSaveable(suggestion.recognizedText) {
@@ -793,115 +1046,125 @@ private fun AddScannedFoodDialog(
     val scaledSugars = scaleNutritionValue(baseSugars, selectedQuantity.multiplier)
     val scaledFibers = scaleNutritionValue(baseFibers, selectedQuantity.multiplier)
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Add scanned food") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 48.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            Text(
+                text = "Verify Scanned Food",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                NutritionPanel(title = "Food details") {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        singleLine = true,
-                        label = { Text("Food name") },
+                        label = { Text("Product Name") },
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    
                     MealTypeSelector(
                         selectedMeal = selectedMeal,
                         onMealSelected = { selectedMeal = it },
                     )
                 }
+            }
 
-                NutritionPanel(title = "Quantity") {
-                    Text(
-                        text = "Serving options use per-serving values. Grams uses per-100g values.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(ScannedQuantityOption.entries.size) { index ->
-                            val option = ScannedQuantityOption.entries[index]
-                            FilterChip(
-                                selected = selectedQuantityOption == option,
-                                onClick = { selectedQuantityOption = option },
-                                label = { Text(option.label) },
-                            )
-                        }
-                    }
-                    when (selectedQuantityOption) {
-                        ScannedQuantityOption.Multiple -> {
-                            OutlinedTextField(
-                                value = multipleServingsText,
-                                onValueChange = { value ->
-                                    multipleServingsText = value.filter { char ->
-                                        char.isDigit() || char == '.' || char == ','
-                                    }
-                                },
-                                singleLine = true,
-                                label = { Text("How many full servings") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                            )
-                        }
-                        ScannedQuantityOption.Grams -> {
-                            OutlinedTextField(
-                                value = gramsText,
-                                onValueChange = { value ->
-                                    gramsText = value.filter { char ->
-                                        char.isDigit() || char == '.' || char == ','
-                                    }
-                                },
-                                singleLine = true,
-                                label = { Text("Consumed grams") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                            )
-                        }
-                        else -> Unit
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (selectedQuantity.isValid) {
-                        Text(
-                            text = "Selected amount: ${selectedQuantity.summary}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    } else {
-                        Text(
-                            text = "Enter a valid positive quantity.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
+            Column {
+                Text(text = "Select Quantity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(ScannedQuantityOption.entries) { option ->
+                        FilterChip(
+                            selected = selectedQuantityOption == option,
+                            onClick = { selectedQuantityOption = option },
+                            label = { Text(option.label) },
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
                 }
-
-                NutritionPanel(title = "Calculated nutrition") {
-                    Text(
-                        text = if (selectedQuantity.usesPerServingValues) {
-                            "Baseline: per serving"
-                        } else {
-                            "Baseline: per 100g"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("Calories: $scaledCalories kcal")
-                    Text("Protein: $scaledProtein g")
-                    Text("Carbs: $scaledCarbs g")
-                    Text("Fats: $scaledFats g")
-                    Text("Sugars: $scaledSugars g")
-                    Text("Fibers: $scaledFibers g")
+                
+                when (selectedQuantityOption) {
+                    ScannedQuantityOption.Multiple -> {
+                        OutlinedTextField(
+                            value = multipleServingsText,
+                            onValueChange = { value ->
+                                multipleServingsText = value.filter { char ->
+                                    char.isDigit() || char == '.' || char == ','
+                                }
+                            },
+                            label = { Text("Number of servings") },
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                            )
+                        )
+                    }
+                    ScannedQuantityOption.Grams -> {
+                        OutlinedTextField(
+                            value = gramsText,
+                            onValueChange = { value ->
+                                gramsText = value.filter { char ->
+                                    char.isDigit() || char == '.' || char == ','
+                                }
+                            },
+                            label = { Text("Grams consumed") },
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                            )
+                        )
+                    }
+                    else -> Unit
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Calculated Nutrition",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        NutritionValueLabel("Calories", "$scaledCalories", "kcal")
+                        NutritionValueLabel("Protein", "$scaledProtein", "g")
+                        NutritionValueLabel("Carbs", "$scaledCarbs", "g")
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        NutritionValueLabel("Fats", "$scaledFats", "g")
+                        NutritionValueLabel("Sugars", "$scaledSugars", "g")
+                        NutritionValueLabel("Fibers", "$scaledFibers", "g")
+                    }
+                }
+            }
+
+            Button(
                 enabled = selectedQuantity.isValid,
                 onClick = {
                     val food = FoodEntry(
@@ -917,16 +1180,21 @@ private fun AddScannedFoodDialog(
                     )
                     onAddFood(food)
                 },
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Text("Add scanned food")
+                Text("Add Scanned Food", style = MaterialTheme.typography.titleMedium)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun NutritionValueLabel(label: String, value: String, unit: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.dp)) {
+        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(text = "$label ($unit)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 private fun calculateScannedQuantity(
