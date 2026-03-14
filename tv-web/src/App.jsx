@@ -23,21 +23,22 @@ const POSE_CONNECTIONS = [
   [28, 30], [30, 32],
 ]
 
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || ''
+
 function App() {
-  const [mUrl, setMUrl] = useState(import.meta.env.VITE_LIVEKIT_URL || '')
   const [mRoomCode, setMRoomCode] = useState('')
   const [mToken, setMToken] = useState('')
   const [mStatus, setMStatus] = useState('Disconnected')
   const [mError, setMError] = useState('')
   const [mDebug, setMDebug] = useState('No remote participants.')
-  const [mLandmarkSeq, setMLandmarkSeq] = useState(null)
-  const [mLandmarkCount, setMLandmarkCount] = useState(0)
-  const [mReceivedPps, setMReceivedPps] = useState(0)
   const [mSkeletonFrame, setMSkeletonFrame] = useState(null)
   const [mRoom, setMRoom] = useState(null)
+  const [mRotation, setMRotation] = useState(0)
+  const [mIsFullscreen, setIsFullscreen] = useState(false)
   const mCanvasRef = useRef(null)
   const mRxWindowStartMsRef = useRef(0)
   const mRxWindowPacketCountRef = useRef(0)
+  const mVideoStageRef = useRef(null)
 
   const decodeLandmarkPacket = (payload) => {
     const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
@@ -94,34 +95,68 @@ function App() {
       return
     }
 
-    const scale = Math.max(renderWidth / frame.frameWidth, renderHeight / frame.frameHeight)
-    const scaledFrameWidth = frame.frameWidth * scale
-    const scaledFrameHeight = frame.frameHeight * scale
+    // Apply user-selected rotation
+    const isQuarterTurn = mRotation === 90 || mRotation === 270
+    const sourceWidth = isQuarterTurn ? frame.frameHeight : frame.frameWidth
+    const sourceHeight = isQuarterTurn ? frame.frameWidth : frame.frameHeight
+
+    const padding = 0.9
+    const scale = Math.min(renderWidth / sourceWidth, renderHeight / sourceHeight) * padding
+    const scaledFrameWidth = sourceWidth * scale
+    const scaledFrameHeight = sourceHeight * scale
     const offsetX = (renderWidth - scaledFrameWidth) / 2
     const offsetY = (renderHeight - scaledFrameHeight) / 2
 
-    const mapX = (normalizedX) => {
-      const mirroredX = frame.isFrontCamera ? 1 - normalizedX : normalizedX
-      return (mirroredX * scaledFrameWidth) + offsetX
+    const mapPoint = (landmark) => {
+      if (!landmark) return null
+      
+      let x = landmark.x
+      let y = landmark.y
+      
+      // Apply rotation
+      if (mRotation === 90) {
+        // 90° clockwise: (x, y) -> (y, 1-x)
+        const temp = x
+        x = y
+        y = 1 - temp
+      } else if (mRotation === 180) {
+        // 180°: (x, y) -> (1-x, 1-y)
+        x = 1 - x
+        y = 1 - y
+      } else if (mRotation === 270) {
+        // 270° clockwise: (x, y) -> (1-y, x)
+        const temp = x
+        x = 1 - y
+        y = temp
+      }
+      
+      // Mirror for front camera
+      const mirroredX = frame.isFrontCamera ? 1 - x : x
+      
+      return {
+        x: (mirroredX * scaledFrameWidth) + offsetX,
+        y: (y * scaledFrameHeight) + offsetY
+      }
     }
-    const mapY = (normalizedY) => (normalizedY * scaledFrameHeight) + offsetY
 
     ctx.strokeStyle = '#00ffff'
     ctx.lineWidth = 3
     for (const [startIndex, endIndex] of POSE_CONNECTIONS) {
-      const start = frame.landmarks[startIndex]
-      const end = frame.landmarks[endIndex]
+      const start = mapPoint(frame.landmarks[startIndex])
+      const end = mapPoint(frame.landmarks[endIndex])
       if (!start || !end) continue
       ctx.beginPath()
-      ctx.moveTo(mapX(start.x), mapY(start.y))
-      ctx.lineTo(mapX(end.x), mapY(end.y))
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
       ctx.stroke()
     }
 
     ctx.fillStyle = '#ffe300'
     for (const landmark of frame.landmarks) {
+      const point = mapPoint(landmark)
+      if (!point) continue
       ctx.beginPath()
-      ctx.arc(mapX(landmark.x), mapY(landmark.y), 4, 0, Math.PI * 2)
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -136,6 +171,16 @@ function App() {
     drawSkeleton(mSkeletonFrame)
   }, [mSkeletonFrame])
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
   const inspectParticipants = (room) => {
     const lines = []
     for (const participant of room.remoteParticipants.values()) {
@@ -144,9 +189,10 @@ function App() {
     setMDebug(lines.length ? `Participants: ${lines.join(', ')}` : 'No remote participants.')
   }
 
-  const handleConnect = async () => {
-    if (!mUrl.trim() || !mToken.trim()) {
-      setMError('Missing URL/token.')
+  const handleConnect = async (token) => {
+    const tokenToUse = token || mToken
+    if (!tokenToUse.trim()) {
+      setMError('Missing token.')
       return
     }
 
@@ -174,14 +220,10 @@ function App() {
         mRxWindowPacketCountRef.current += 1
         const elapsedMs = nowMs - mRxWindowStartMsRef.current
         if (elapsedMs >= 1000) {
-          const packetsPerSecond = Math.round((mRxWindowPacketCountRef.current * 1000) / elapsedMs)
-          setMReceivedPps(packetsPerSecond)
           mRxWindowStartMsRef.current = nowMs
           mRxWindowPacketCountRef.current = 0
         }
 
-        setMLandmarkSeq(data.sequence)
-        setMLandmarkCount(data.landmarkCount)
         setMSkeletonFrame(data)
         setMError('')
         setMStatus(`Connected (landmarks from ${participant?.identity || 'unknown'})`)
@@ -193,16 +235,14 @@ function App() {
     room.on(RoomEvent.Disconnected, () => {
       setMStatus('Disconnected')
       setMDebug('No remote participants.')
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMSkeletonFrame(null)
     })
 
     try {
-      await room.connect(mUrl.trim(), mToken.trim())
+      await room.connect(LIVEKIT_URL, tokenToUse.trim())
       setMRoom(room)
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMStatus('Connected (waiting for landmarks)')
@@ -221,6 +261,8 @@ function App() {
       setMRoomCode(code)
       setMToken(token)
       setMError('')
+      // Auto-connect after generating token
+      await handleConnect(token)
     } catch (error) {
       setMError(`Failed to generate room code: ${error.message}`)
     }
@@ -231,54 +273,72 @@ function App() {
     setMRoom(null)
     setMStatus('Disconnected')
     setMDebug('No remote participants.')
-    setMReceivedPps(0)
     mRxWindowStartMsRef.current = 0
     mRxWindowPacketCountRef.current = 0
     setMSkeletonFrame(null)
   }
 
+  const handleRotateLeft = () => {
+    setMRotation((prev) => (prev - 90 + 360) % 360)
+  }
+
+  const handleRotateRight = () => {
+    setMRotation((prev) => (prev + 90) % 360)
+  }
+
+  const handleResetRotation = () => {
+    setMRotation(0)
+  }
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mVideoStageRef.current?.requestFullscreen()
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen()
+      setIsFullscreen(false)
+    }
+  }
+
   return (
     <main className="page">
-      <h1>Seally LiveKit Skeleton Receiver</h1>
+      <header className="hero">
+        <h1>Seally Ice Harbor</h1>
+        <p className="hero-subtitle">
+          Monitor live seal-motion landmarks from mobile in an ocean-inspired control room.
+        </p>
+      </header>
 
       <section className="panel">
-        <label>
-          LiveKit URL
-          <input value={mUrl} onChange={(event) => setMUrl(event.target.value)} />
-        </label>
         <div className="actions">
-          <button disabled={!!mRoomCode} onClick={handleGenerateRoomCode}>
-            Generate Room Code
+          <button disabled={!!mRoom} onClick={handleGenerateRoomCode}>
+            Generate Seal Room Code
           </button>
         </div>
         {mRoomCode && (
           <div className="room-code-display">
             <p><strong>Room Code:</strong> <span className="code">{mRoomCode}</span></p>
-            <p className="hint">Enter this code on the mobile app to connect</p>
+            <p className="hint">Share this code with the mobile seal tracker to dock the session</p>
           </div>
         )}
-        {mToken && (
-          <label>
-            Token (auto-generated)
-            <textarea value={mToken} readOnly />
-          </label>
-        )}
-        <div className="actions">
-          <button disabled={!!mRoom} onClick={handleConnect}>Connect</button>
-          <button disabled={!mRoom} onClick={handleDisconnect}>Disconnect</button>
-        </div>
       </section>
 
       <section className="status">
-        <p><strong>Status:</strong> {mStatus}</p>
-        <p><strong>Topic:</strong> {LANDMARK_TOPIC}</p>
-        <p><strong>Landmarks:</strong> seq={mLandmarkSeq ?? '-'} count={mLandmarkCount} rxPps={mReceivedPps}</p>
+        <p><strong>Harbor Status:</strong> {mStatus}</p>
         <p className="debug">{mDebug}</p>
         {mError && <p className="error">{mError}</p>}
       </section>
 
-      <section className="video-stage">
+      <section ref={mVideoStageRef} className={`video-stage${mIsFullscreen ? ' fullscreen' : ''}`}>
         <canvas ref={mCanvasRef} className="skeleton-canvas" />
+        <button className="fullscreen-toggle" onClick={handleToggleFullscreen} title={mIsFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+          {mIsFullscreen ? '❐' : '❐'}
+        </button>
+        <div className="rotation-controls">
+          <button onClick={handleRotateLeft} title="Rotate left">↺</button>
+          <button onClick={handleResetRotation} title="Reset rotation">⟲</button>
+          <button onClick={handleRotateRight} title="Rotate right">↻</button>
+        </div>
       </section>
     </main>
   )
