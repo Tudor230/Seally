@@ -386,5 +386,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
+        private const val LANDMARK_SEND_MIN_INTERVAL_MS = 66L
+        private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
+        private const val DEFAULT_LANDMARK_TOPIC = "pose.normalized.v1"
+        private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
     }
 }
