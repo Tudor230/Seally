@@ -14,7 +14,10 @@ private enum class PullUpPhase {
 class PullUpFormFeedbackEngine {
     private var mRepCount: Int = 0
     private var mPhase: PullUpPhase = PullUpPhase.DEAD_HANG
+    private var mHasDetectedStartPosition: Boolean = false
     private var mHasReachedTopInCurrentRep: Boolean = false
+    private var mHasStableHandsInCurrentRep: Boolean = true
+    private var mWristAnchor: WristAnchor? = null
     private var mPendingCue: String? = null
     private var mPendingCueJoints: List<String> = emptyList()
     private var mPendingCueFrames: Int = 0
@@ -24,20 +27,7 @@ class PullUpFormFeedbackEngine {
 
     fun process(
         normalizedLandmarks: List<NormalizedLandmark>,
-        barCalibration: PullUpBarCalibration?,
     ): FormFeedback {
-        if (barCalibration == null) {
-            resetTrackingOnly()
-            return FormFeedback(
-                mPrimaryCue = "Tap left and right bar ends",
-                mStatus = ExerciseStatus.INITIALIZING,
-                mRepCount = mRepCount,
-                mIsCorrecting = true,
-                mProblematicJoints = listOf("left hand", "right hand"),
-                mErrorMessage = "Tap left and right bar ends",
-            )
-        }
-
         val frontLandmarks = getFrontLandmarks(normalizedLandmarks) ?: return FormFeedback(
             mPrimaryCue = "Step into frame",
             mStatus = ExerciseStatus.ERROR,
@@ -64,57 +54,98 @@ class PullUpFormFeedbackEngine {
             cy = frontLandmarks.mRightWrist.y(),
         )
         val averageElbowAngle = (leftElbowAngle + rightElbowAngle) / 2f
-        val chinY = (frontLandmarks.mMouthLeft.y() + frontLandmarks.mMouthRight.y()) / 2f
-        val isChinAboveBar = chinY < (barCalibration.mBarY - CHIN_BAR_MARGIN)
-        val isBelowBar = chinY > (barCalibration.mBarY + CHIN_BAR_MARGIN)
+        val mouthY = (frontLandmarks.mMouthLeft.y() + frontLandmarks.mMouthRight.y()) / 2f
+        val handsY = (frontLandmarks.mLeftWrist.y() + frontLandmarks.mRightWrist.y()) / 2f
         val isArmsExtended = averageElbowAngle >= DEAD_HANG_ELBOW_ANGLE_DEG
+        val isMouthAboveHands = mouthY < (handsY - MOUTH_ABOVE_HANDS_MARGIN)
+        val isMouthBelowHands = mouthY > (handsY + MOUTH_BELOW_HANDS_MARGIN)
+        val isBottomPosition = isArmsExtended && isMouthBelowHands
+
+        var speechCue: String? = null
+        if (isBottomPosition && mWristAnchor == null) {
+            mWristAnchor = WristAnchor(
+                mLeftX = frontLandmarks.mLeftWrist.x(),
+                mLeftY = frontLandmarks.mLeftWrist.y(),
+                mRightX = frontLandmarks.mRightWrist.x(),
+                mRightY = frontLandmarks.mRightWrist.y(),
+            )
+        }
+        val isHandsStable = isHandsStable(frontLandmarks)
+        if (!isHandsStable) {
+            mHasStableHandsInCurrentRep = false
+        }
 
         when (mPhase) {
             PullUpPhase.DEAD_HANG -> {
-                if (!isArmsExtended || !isBelowBar) {
-                    mPhase = PullUpPhase.PULLING
+                if (isBottomPosition) {
                     mHasReachedTopInCurrentRep = false
+                    mHasStableHandsInCurrentRep = true
+                    mWristAnchor = WristAnchor(
+                        mLeftX = frontLandmarks.mLeftWrist.x(),
+                        mLeftY = frontLandmarks.mLeftWrist.y(),
+                        mRightX = frontLandmarks.mRightWrist.x(),
+                        mRightY = frontLandmarks.mRightWrist.y(),
+                    )
+                    if (isHandsStable && !mHasDetectedStartPosition) {
+                        mHasDetectedStartPosition = true
+                        speechCue = PULL_UP_CUE
+                    }
+                } else if (mHasDetectedStartPosition && isHandsStable) {
+                    mPhase = PullUpPhase.PULLING
                 }
             }
             PullUpPhase.PULLING -> {
-                if (isChinAboveBar) {
+                if (isMouthAboveHands) {
                     mPhase = PullUpPhase.TOP
-                    mHasReachedTopInCurrentRep = true
-                } else if (isBelowBar && isArmsExtended) {
+                    if (!mHasReachedTopInCurrentRep) {
+                        mHasReachedTopInCurrentRep = true
+                        if (mHasStableHandsInCurrentRep) {
+                            mRepCount += 1
+                        }
+                        speechCue = REP_COMPLETE_CUE
+                    }
+                } else if (isBottomPosition) {
                     mPhase = PullUpPhase.DEAD_HANG
                 }
             }
             PullUpPhase.TOP -> {
-                if (!isChinAboveBar) {
+                if (!isMouthAboveHands) {
                     mPhase = PullUpPhase.LOWERING
                 }
             }
             PullUpPhase.LOWERING -> {
-                if (isBelowBar && isArmsExtended) {
-                    if (mHasReachedTopInCurrentRep) {
-                        mRepCount += 1
-                    }
+                if (isBottomPosition) {
                     mPhase = PullUpPhase.DEAD_HANG
+                    mHasDetectedStartPosition = false
                     mHasReachedTopInCurrentRep = false
+                    mHasStableHandsInCurrentRep = true
                 }
             }
         }
 
         var frameCue: String? = null
         var frameJoints: List<String> = emptyList()
-        if (mPhase == PullUpPhase.LOWERING && !isArmsExtended && isBelowBar) {
+        if (!isHandsStable) {
+            frameCue = "Keep your hands fixed"
+            frameJoints = listOf("left wrist", "right wrist")
+        } else if ((mPhase == PullUpPhase.LOWERING || mPhase == PullUpPhase.DEAD_HANG) && !isArmsExtended && isMouthBelowHands) {
             frameCue = "Fully extend your arms"
             frameJoints = listOf("elbows", "wrists")
-        } else if (mPhase == PullUpPhase.PULLING && isBelowBar && isArmsExtended && !mHasReachedTopInCurrentRep) {
-            frameCue = "Pull higher"
-            frameJoints = listOf("chin", "bar")
+        } else if (mPhase == PullUpPhase.PULLING && !mHasReachedTopInCurrentRep) {
+            frameCue = "Bring your mouth above your hands"
+            frameJoints = listOf("mouth", "wrists")
         }
 
         stabilizeCue(frameCue, frameJoints)
         val isCorrecting = mPersistedCue != null
         return FormFeedback(
             mPrimaryCue = mPersistedCue,
-            mStatus = if (isCorrecting) ExerciseStatus.ERROR else ExerciseStatus.ACTIVE,
+            mSpeechCue = speechCue,
+            mStatus = when {
+                isCorrecting -> ExerciseStatus.ERROR
+                mPhase == PullUpPhase.DEAD_HANG -> ExerciseStatus.READY
+                else -> ExerciseStatus.ACTIVE
+            },
             mRepCount = mRepCount,
             mIsCorrecting = isCorrecting,
             mProblematicJoints = mPersistedCueJoints,
@@ -125,18 +156,10 @@ class PullUpFormFeedbackEngine {
     fun reset() {
         mRepCount = 0
         mPhase = PullUpPhase.DEAD_HANG
+        mHasDetectedStartPosition = false
         mHasReachedTopInCurrentRep = false
-        mPendingCue = null
-        mPendingCueJoints = emptyList()
-        mPendingCueFrames = 0
-        mPersistedCue = null
-        mPersistedCueJoints = emptyList()
-        mClearFrames = 0
-    }
-
-    private fun resetTrackingOnly() {
-        mPhase = PullUpPhase.DEAD_HANG
-        mHasReachedTopInCurrentRep = false
+        mHasStableHandsInCurrentRep = true
+        mWristAnchor = null
         mPendingCue = null
         mPendingCueJoints = emptyList()
         mPendingCueFrames = 0
@@ -191,6 +214,15 @@ class PullUpFormFeedbackEngine {
         )
     }
 
+    private fun isHandsStable(landmarks: PullUpFrontLandmarks): Boolean {
+        val anchor = mWristAnchor ?: return true
+        val leftXStable = abs(landmarks.mLeftWrist.x() - anchor.mLeftX) <= WRIST_STABILITY_TOLERANCE
+        val leftYStable = abs(landmarks.mLeftWrist.y() - anchor.mLeftY) <= WRIST_STABILITY_TOLERANCE
+        val rightXStable = abs(landmarks.mRightWrist.x() - anchor.mRightX) <= WRIST_STABILITY_TOLERANCE
+        val rightYStable = abs(landmarks.mRightWrist.y() - anchor.mRightY) <= WRIST_STABILITY_TOLERANCE
+        return leftXStable && leftYStable && rightXStable && rightYStable
+    }
+
     private fun calculateAngleDeg(
         ax: Float,
         ay: Float,
@@ -219,12 +251,23 @@ class PullUpFormFeedbackEngine {
         val mRightWrist: NormalizedLandmark,
     )
 
+    private data class WristAnchor(
+        val mLeftX: Float,
+        val mLeftY: Float,
+        val mRightX: Float,
+        val mRightY: Float,
+    )
+
     companion object {
         private const val MIN_VISIBILITY = 0.6f
         private const val DEAD_HANG_ELBOW_ANGLE_DEG = 155f
-        private const val CHIN_BAR_MARGIN = 0.015f
+        private const val MOUTH_ABOVE_HANDS_MARGIN = 0.015f
+        private const val MOUTH_BELOW_HANDS_MARGIN = 0.01f
+        private const val WRIST_STABILITY_TOLERANCE = 0.06f
         private const val PERSISTENCE_FRAMES = 8
         private const val CLEARANCE_FRAMES = 8
+        private const val PULL_UP_CUE = "Pull up"
+        private const val REP_COMPLETE_CUE = "Pull-up complete"
     }
 }
 
