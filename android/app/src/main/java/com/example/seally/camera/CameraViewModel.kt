@@ -47,6 +47,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val mSquatFormFeedbackEngine = SquatFormFeedbackEngine()
     private val mPlankFormFeedbackEngine = PlankFormFeedbackEngine()
     private val mPullUpFormFeedbackEngine = PullUpFormFeedbackEngine()
+    private val mPushUpFormFeedbackEngine = PushUpFormFeedbackEngine()
     private var mIsPoseLandmarkerInitializing: Boolean = false
     @Volatile
     private var mAcceptFrames: Boolean = false
@@ -95,6 +96,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mSquatFormFeedbackEngine.reset()
             mPlankFormFeedbackEngine.reset()
             mPullUpFormFeedbackEngine.reset()
+            mPushUpFormFeedbackEngine.reset()
             mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
             mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (no camera permission)") }
             return
@@ -170,6 +172,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                                     )
                                     ExerciseType.PULLUP -> mPullUpFormFeedbackEngine.process(
                                         normalizedLandmarks = firstPose,
+                                    )
+                                    ExerciseType.PUSHUP -> mPushUpFormFeedbackEngine.process(
+                                        normalizedLandmarks = firstPose,
+                                        worldLandmarks = firstPoseWorld,
                                     )
                                 }
                                 mUiState.update {
@@ -280,6 +286,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
+        mPushUpFormFeedbackEngine.reset()
     }
 
     fun setFrontCamera(isFrontCamera: Boolean) {
@@ -294,6 +301,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
+        mPushUpFormFeedbackEngine.reset()
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
@@ -306,12 +314,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
+        mPushUpFormFeedbackEngine.reset()
         mUiState.update { currentState ->
             currentState.copy(
                 mSelectedExercise = when (currentState.mSelectedExercise) {
                     ExerciseType.SQUAT -> ExerciseType.PLANK
                     ExerciseType.PLANK -> ExerciseType.PULLUP
-                    ExerciseType.PULLUP -> ExerciseType.SQUAT
+                    ExerciseType.PULLUP -> ExerciseType.PUSHUP
+                    ExerciseType.PUSHUP -> ExerciseType.SQUAT
                 },
                 mFormFeedback = FormFeedback(),
             )
@@ -413,6 +423,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mSquatFormFeedbackEngine.reset()
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
+        mPushUpFormFeedbackEngine.reset()
         super.onCleared()
     }
 

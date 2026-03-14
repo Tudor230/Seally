@@ -317,6 +317,7 @@ private fun createExerciseGuideIntent(
         ExerciseType.SQUAT -> SquatGuideActivity::class.java
         ExerciseType.PLANK -> PlankGuideActivity::class.java
         ExerciseType.PULLUP -> PullupGuideActivity::class.java
+        ExerciseType.PUSHUP -> PushupGuideActivity::class.java
     }
     return Intent(context, activityClass)
 }
@@ -331,6 +332,7 @@ private fun FeedbackPanel(
         ExerciseType.SQUAT -> "Squat"
         ExerciseType.PLANK -> "Plank"
         ExerciseType.PULLUP -> "Pullup"
+        ExerciseType.PUSHUP -> "Push-up"
     }
     val statusText = when (feedback.mStatus) {
         ExerciseStatus.INITIALIZING -> "Initializing"
@@ -356,6 +358,10 @@ private fun FeedbackPanel(
                 append(formatDuration(feedback.mHoldDurationMs))
             }
             ExerciseType.PULLUP -> {
+                append(" • Reps: ")
+                append(feedback.mRepCount)
+            }
+            ExerciseType.PUSHUP -> {
                 append(" • Reps: ")
                 append(feedback.mRepCount)
             }

@@ -16,6 +16,7 @@ enum class ExerciseType {
     SQUAT,
     PLANK,
     PULLUP,
+    PUSHUP,
 }
 
 enum class ExerciseStatus {
