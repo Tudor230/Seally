@@ -1,21 +1,22 @@
 package com.example.seally.home
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -27,6 +28,8 @@ fun HomeScreen(
     onSettingsClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
+
+    // Image Requests
     val settingsSvgRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/icons/settings_icon.png")
         .decoderFactory(SvgDecoder.Factory())
@@ -40,60 +43,95 @@ fun HomeScreen(
         .data("file:///android_asset/icons/skinny - no background.png")
         .build()
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Text(
-            text = "Home",
-            modifier = Modifier.align(Alignment.Center),
-        )
-
-        // Image placed under the top buttons (profile/settings)
-        AsyncImage(
-            model = headerImageRequest,
-            contentDescription = "Header image",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 95.dp)
-                .size(220.dp),
-        )
-
-        // Main character image centered above the bottom navigation bar
-        AsyncImage(
-            model = skinnyImageRequest,
-            contentDescription = "Character",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                // Push it up so it sits above the bottom nav bar
-                .offset(y = (-92).dp)
-                .size(400.dp),
-        )
-
-        IconButton(
-            onClick = onProfileClick,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(20.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.AccountCircle,
-                contentDescription = "Profile",
-                modifier = Modifier.size(30.dp),
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                )
             )
+    ) {
+        // --- Top Navigation Row ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onProfileClick,
+                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Profile",
+                    modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            IconButton(onClick = onSettingsClick) {
+                AsyncImage(
+                    model = settingsSvgRequest,
+                    contentDescription = "Settings",
+                    modifier = Modifier.size(32.dp), // Normalized size
+                )
+            }
         }
 
-        IconButton(
-            onClick = onSettingsClick,
+        // --- Main Content Area ---
+        Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp),
+                .fillMaxSize()
+                .padding(bottom = 100.dp), // Space for bottom nav
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            AsyncImage(
-                model = settingsSvgRequest,
-                contentDescription = "Settings",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(60.dp),
-            )
+            // Top Section: Title & Header Line
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(top = 40.dp)
+            ) {
+                Text(
+                    text = "Welcome Back",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-1).sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                AsyncImage(
+                    model = headerImageRequest,
+                    contentDescription = "Decorative Line",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.width(180.dp)
+                )
+            }
+
+            // Bottom Section: Character
+            Box(
+                contentAlignment = Alignment.BottomCenter,
+                modifier = Modifier.weight(1f)
+            ) {
+
+                AsyncImage(
+                    model = skinnyImageRequest,
+                    contentDescription = "Character",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxHeight(0.85f)
+                        .padding(horizontal = 24.dp)
+                )
+            }
         }
     }
 }
