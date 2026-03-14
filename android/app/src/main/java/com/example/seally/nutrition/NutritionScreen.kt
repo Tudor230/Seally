@@ -88,6 +88,8 @@ private data class FoodEntry(
     val protein: Int,
     val carbs: Int,
     val fats: Int,
+    val sugars: Int,
+    val fibers: Int,
     val isHealthy: Boolean,
 )
 
@@ -101,6 +103,8 @@ fun NutritionScreen(
     val proteinTarget = 140
     val carbsTarget = 220
     val fatTarget = 70
+    val sugarTarget = 50
+    val fiberTarget = 30
 
     var currentPage by rememberSaveable { mutableStateOf(NutritionPage.Kitchen) }
     var waterConsumedMl by rememberSaveable { mutableIntStateOf(0) }
@@ -115,6 +119,8 @@ fun NutritionScreen(
     val proteinConsumed = foods.sumOf { it.protein }
     val carbsConsumed = foods.sumOf { it.carbs }
     val fatsConsumed = foods.sumOf { it.fats }
+    val sugarsConsumed = foods.sumOf { it.sugars }
+    val fibersConsumed = foods.sumOf { it.fibers }
 
     LaunchedEffect(sealCelebrationTick) {
         if (sealCelebrationTick == 0) {
@@ -150,6 +156,10 @@ fun NutritionScreen(
                 carbsTarget = carbsTarget,
                 fatsConsumed = fatsConsumed,
                 fatTarget = fatTarget,
+                sugarsConsumed = sugarsConsumed,
+                sugarTarget = sugarTarget,
+                fibersConsumed = fibersConsumed,
+                fiberTarget = fiberTarget,
                 onBack = { currentPage = NutritionPage.Kitchen },
                 onOpenCamera = {
                     currentPage = NutritionPage.Camera
@@ -241,6 +251,10 @@ private fun FoodTrackingPage(
     carbsTarget: Int,
     fatsConsumed: Int,
     fatTarget: Int,
+    sugarsConsumed: Int,
+    sugarTarget: Int,
+    fibersConsumed: Int,
+    fiberTarget: Int,
     onBack: () -> Unit,
     onOpenCamera: () -> Unit,
     onManualAddFood: (FoodEntry) -> Unit,
@@ -291,6 +305,8 @@ private fun FoodTrackingPage(
                 MacroLine("Protein", proteinConsumed, proteinTarget)
                 MacroLine("Carbs", carbsConsumed, carbsTarget)
                 MacroLine("Fats", fatsConsumed, fatTarget)
+                MacroLine("Sugars", sugarsConsumed, sugarTarget)
+                MacroLine("Fibers", fibersConsumed, fiberTarget)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -329,13 +345,19 @@ private fun FoodTrackingPage(
                             )
                         } else {
                             mealFoods.forEach { food ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text(food.name, modifier = Modifier.weight(1f))
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text("${food.calories} kcal")
+                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text(food.name, modifier = Modifier.weight(1f))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("${food.calories} kcal")
+                                    }
+                                    Text(
+                                        text = "P ${food.protein}g • C ${food.carbs}g • F ${food.fats}g • S ${food.sugars}g • Fi ${food.fibers}g",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
                             }
                         }
@@ -639,6 +661,8 @@ private fun AddFoodDialog(
     var proteinText by rememberSaveable { mutableStateOf("") }
     var carbsText by rememberSaveable { mutableStateOf("") }
     var fatsText by rememberSaveable { mutableStateOf("") }
+    var sugarsText by rememberSaveable { mutableStateOf("") }
+    var fibersText by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -687,6 +711,20 @@ private fun AddFoodDialog(
                     label = { Text("Fats (g)") },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = sugarsText,
+                    onValueChange = { sugarsText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Sugars (g)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = fibersText,
+                    onValueChange = { fibersText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Fibers (g)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
         confirmButton = {
@@ -696,6 +734,8 @@ private fun AddFoodDialog(
                     val protein = proteinText.toIntOrNull() ?: 0
                     val carbs = carbsText.toIntOrNull() ?: 0
                     val fats = fatsText.toIntOrNull() ?: 0
+                    val sugars = sugarsText.toIntOrNull() ?: 0
+                    val fibers = fibersText.toIntOrNull() ?: 0
                     val food = FoodEntry(
                         name = name.ifBlank { "Unnamed food" },
                         meal = selectedMeal,
@@ -703,6 +743,8 @@ private fun AddFoodDialog(
                         protein = protein,
                         carbs = carbs,
                         fats = fats,
+                        sugars = sugars,
+                        fibers = fibers,
                         isHealthy = calories in 1..500,
                     )
                     onAddFood(food)
@@ -742,10 +784,14 @@ private fun AddScannedFoodDialog(
     val baseProtein = if (selectedQuantity.usesPerServingValues) suggestion.protein else suggestion.proteinPer100g
     val baseCarbs = if (selectedQuantity.usesPerServingValues) suggestion.carbs else suggestion.carbsPer100g
     val baseFats = if (selectedQuantity.usesPerServingValues) suggestion.fats else suggestion.fatsPer100g
+    val baseSugars = if (selectedQuantity.usesPerServingValues) suggestion.sugars else suggestion.sugarsPer100g
+    val baseFibers = if (selectedQuantity.usesPerServingValues) suggestion.fibers else suggestion.fibersPer100g
     val scaledCalories = scaleNutritionValue(baseCalories, selectedQuantity.multiplier)
     val scaledProtein = scaleNutritionValue(baseProtein, selectedQuantity.multiplier)
     val scaledCarbs = scaleNutritionValue(baseCarbs, selectedQuantity.multiplier)
     val scaledFats = scaleNutritionValue(baseFats, selectedQuantity.multiplier)
+    val scaledSugars = scaleNutritionValue(baseSugars, selectedQuantity.multiplier)
+    val scaledFibers = scaleNutritionValue(baseFibers, selectedQuantity.multiplier)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -849,6 +895,8 @@ private fun AddScannedFoodDialog(
                     Text("Protein: $scaledProtein g")
                     Text("Carbs: $scaledCarbs g")
                     Text("Fats: $scaledFats g")
+                    Text("Sugars: $scaledSugars g")
+                    Text("Fibers: $scaledFibers g")
                 }
             }
         },
@@ -863,6 +911,8 @@ private fun AddScannedFoodDialog(
                         protein = scaledProtein,
                         carbs = scaledCarbs,
                         fats = scaledFats,
+                        sugars = scaledSugars,
+                        fibers = scaledFibers,
                         isHealthy = scaledCalories in 1..500,
                     )
                     onAddFood(food)

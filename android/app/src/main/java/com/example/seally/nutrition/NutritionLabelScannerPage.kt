@@ -81,11 +81,15 @@ data class NutritionLabelScanResult(
     val protein: Int,
     val carbs: Int,
     val fats: Int,
+    val sugars: Int = 0,
+    val fibers: Int = 0,
     // Per-100g values (used for direct grams option)
     val caloriesPer100g: Int = calories,
     val proteinPer100g: Int = protein,
     val carbsPer100g: Int = carbs,
     val fatsPer100g: Int = fats,
+    val sugarsPer100g: Int = sugars,
+    val fibersPer100g: Int = fibers,
     val recognizedText: String,
 )
 
@@ -474,7 +478,7 @@ private fun LiveDetectionOverlay(
 }
 
 private fun NutritionLabelScanResult.toLogPayload(): String {
-    return "name=$name, serving=[$calories,$protein,$carbs,$fats], per100g=[$caloriesPer100g,$proteinPer100g,$carbsPer100g,$fatsPer100g], recognizedText=$recognizedText"
+    return "name=$name, serving=[$calories,$protein,$carbs,$fats,$sugars,$fibers], per100g=[$caloriesPer100g,$proteinPer100g,$carbsPer100g,$fatsPer100g,$sugarsPer100g,$fibersPer100g], recognizedText=$recognizedText"
 }
 
 private class OnDeviceNutritionOcrEngine {
@@ -726,6 +730,14 @@ private class OpenFoodFactsApiClient {
                         "fat_serving",
                         "fat",
                     )?.roundToInt()
+                    val sugarsPerServing = nutriments.readNumericValue(
+                        "sugars_serving",
+                        "sugars",
+                    )?.roundToInt()
+                    val fibersPerServing = nutriments.readNumericValue(
+                        "fiber_serving",
+                        "fiber",
+                    )?.roundToInt()
 
                     val caloriesPer100g = nutriments.readNumericValue(
                         "energy-kcal_100g",
@@ -743,6 +755,14 @@ private class OpenFoodFactsApiClient {
                         "fat_100g",
                         "fat",
                     )?.roundToInt()
+                    val sugarsPer100g = nutriments.readNumericValue(
+                        "sugars_100g",
+                        "sugars",
+                    )?.roundToInt()
+                    val fibersPer100g = nutriments.readNumericValue(
+                        "fiber_100g",
+                        "fiber",
+                    )?.roundToInt()
                     val productName = productObject.optString("product_name")
                         .ifBlank { productObject.optString("product_name_en") }
                         .ifBlank { "Scanned barcode product" }
@@ -753,10 +773,14 @@ private class OpenFoodFactsApiClient {
                         protein = (proteinPerServing ?: proteinPer100g ?: 0).coerceAtLeast(0),
                         carbs = (carbsPerServing ?: carbsPer100g ?: 0).coerceAtLeast(0),
                         fats = (fatsPerServing ?: fatsPer100g ?: 0).coerceAtLeast(0),
+                        sugars = (sugarsPerServing ?: sugarsPer100g ?: 0).coerceAtLeast(0),
+                        fibers = (fibersPerServing ?: fibersPer100g ?: 0).coerceAtLeast(0),
                         caloriesPer100g = (caloriesPer100g ?: caloriesPerServing ?: 0).coerceAtLeast(0),
                         proteinPer100g = (proteinPer100g ?: proteinPerServing ?: 0).coerceAtLeast(0),
                         carbsPer100g = (carbsPer100g ?: carbsPerServing ?: 0).coerceAtLeast(0),
                         fatsPer100g = (fatsPer100g ?: fatsPerServing ?: 0).coerceAtLeast(0),
+                        sugarsPer100g = (sugarsPer100g ?: sugarsPerServing ?: 0).coerceAtLeast(0),
+                        fibersPer100g = (fibersPer100g ?: fibersPerServing ?: 0).coerceAtLeast(0),
                         recognizedText = "barcode:$sanitizedBarcode",
                     )
                     Log.d(
@@ -833,6 +857,8 @@ private object NutritionLabelParser {
             listOf("total carbohydrate", "carbohydrate", "carbohydrates", "carbs"),
         )
         var fats = extractMacroValue(lines, rawText, listOf("total fat", "fat", "fats", "lipids"))
+        var sugars = extractMacroValue(lines, rawText, listOf("sugars", "sugar", "total sugars"))
+        var fibers = extractMacroValue(lines, rawText, listOf("fiber", "fibre", "dietary fiber"))
 
         val matchedPreset = findPreset(name, rawText)
         if (name.isBlank() && matchedPreset != null) {
@@ -843,7 +869,7 @@ private object NutritionLabelParser {
         if (carbs <= 0) carbs = matchedPreset?.carbs ?: 0
         if (fats <= 0) fats = matchedPreset?.fats ?: 0
 
-        if (name.isBlank() && calories == 0 && protein == 0 && carbs == 0 && fats == 0) {
+        if (name.isBlank() && calories == 0 && protein == 0 && carbs == 0 && fats == 0 && sugars == 0 && fibers == 0) {
             return null
         }
 
@@ -853,6 +879,8 @@ private object NutritionLabelParser {
             protein = protein.coerceAtLeast(0),
             carbs = carbs.coerceAtLeast(0),
             fats = fats.coerceAtLeast(0),
+            sugars = sugars.coerceAtLeast(0),
+            fibers = fibers.coerceAtLeast(0),
             recognizedText = rawText.trim(),
         )
     }
