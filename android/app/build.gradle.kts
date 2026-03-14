@@ -67,6 +67,8 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.vision.common)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

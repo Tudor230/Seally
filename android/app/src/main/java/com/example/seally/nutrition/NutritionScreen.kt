@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import com.example.seally.camera.CameraScreen
 import kotlinx.coroutines.delay
 
 private enum class NutritionPage {
@@ -136,7 +136,6 @@ fun NutritionScreen(
                 fatTarget = fatTarget,
                 onBack = { currentPage = NutritionPage.Kitchen },
                 onOpenCamera = {
-                    sealCelebrationTick++
                     currentPage = NutritionPage.Camera
                 },
                 onManualAddFood = { addedFood ->
@@ -152,6 +151,11 @@ fun NutritionScreen(
             )
             NutritionPage.Camera -> CameraTrackingPage(
                 onBack = { currentPage = NutritionPage.Food },
+                onAddFoodFromScan = { scannedFood ->
+                    foods.add(scannedFood)
+                    sealCelebrationTick++
+                    currentPage = NutritionPage.Food
+                },
             )
         }
         if (shouldShowSealCelebration) {
@@ -429,22 +433,25 @@ private fun WaterTrackingPage(
 @Composable
 private fun CameraTrackingPage(
     onBack: () -> Unit,
+    onAddFoodFromScan: (FoodEntry) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        CameraScreen(modifier = Modifier.fillMaxSize())
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(12.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-            )
-        }
+    var mScannedResult by remember { mutableStateOf<NutritionLabelScanResult?>(null) }
+
+    NutritionLabelScannerPage(
+        modifier = Modifier.fillMaxSize(),
+        onBack = onBack,
+        onScanResult = { scanResult -> mScannedResult = scanResult },
+    )
+
+    mScannedResult?.let { scannedResult ->
+        AddScannedFoodDialog(
+            suggestion = scannedResult,
+            onDismiss = { mScannedResult = null },
+            onAddFood = { newFood ->
+                onAddFoodFromScan(newFood)
+                mScannedResult = null
+            },
+        )
     }
 }
 
@@ -621,45 +628,48 @@ private fun AddFoodDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add food") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
                     label = { Text("Food name") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MealType.entries.forEach { meal ->
-                        FilterChip(
-                            selected = selectedMeal == meal,
-                            onClick = { selectedMeal = meal },
-                            label = { Text(meal.label) },
-                        )
-                    }
-                }
+                MealTypeSelector(
+                    selectedMeal = selectedMeal,
+                    onMealSelected = { selectedMeal = it },
+                )
                 OutlinedTextField(
                     value = caloriesText,
                     onValueChange = { caloriesText = it.filter(Char::isDigit) },
                     singleLine = true,
                     label = { Text("Calories") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = proteinText,
                     onValueChange = { proteinText = it.filter(Char::isDigit) },
                     singleLine = true,
                     label = { Text("Protein (g)") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = carbsText,
                     onValueChange = { carbsText = it.filter(Char::isDigit) },
                     singleLine = true,
                     label = { Text("Carbs (g)") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = fatsText,
                     onValueChange = { fatsText = it.filter(Char::isDigit) },
                     singleLine = true,
                     label = { Text("Fats (g)") },
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
@@ -691,6 +701,125 @@ private fun AddFoodDialog(
             }
         },
     )
+}
+
+@Composable
+private fun AddScannedFoodDialog(
+    suggestion: NutritionLabelScanResult,
+    onDismiss: () -> Unit,
+    onAddFood: (FoodEntry) -> Unit,
+) {
+    var selectedMeal by rememberSaveable(suggestion.recognizedText) { mutableStateOf(MealType.Lunch) }
+    var name by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.name) }
+    var caloriesText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.calories.toString()) }
+    var proteinText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.protein.toString()) }
+    var carbsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.carbs.toString()) }
+    var fatsText by rememberSaveable(suggestion.recognizedText) { mutableStateOf(suggestion.fats.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add scanned food") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Food name") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                MealTypeSelector(
+                    selectedMeal = selectedMeal,
+                    onMealSelected = { selectedMeal = it },
+                )
+                OutlinedTextField(
+                    value = caloriesText,
+                    onValueChange = { caloriesText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Calories") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = proteinText,
+                    onValueChange = { proteinText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Protein (g)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = carbsText,
+                    onValueChange = { carbsText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Carbs (g)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = fatsText,
+                    onValueChange = { fatsText = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    label = { Text("Fats (g)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val calories = caloriesText.toIntOrNull() ?: 0
+                    val protein = proteinText.toIntOrNull() ?: 0
+                    val carbs = carbsText.toIntOrNull() ?: 0
+                    val fats = fatsText.toIntOrNull() ?: 0
+                    val food = FoodEntry(
+                        name = name.ifBlank { "Scanned food" },
+                        meal = selectedMeal,
+                        calories = calories,
+                        protein = protein,
+                        carbs = carbs,
+                        fats = fats,
+                        isHealthy = calories in 1..500,
+                    )
+                    onAddFood(food)
+                },
+            ) {
+                Text("Add scanned food")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
+private fun MealTypeSelector(
+    selectedMeal: MealType,
+    onMealSelected: (MealType) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Meal",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(MealType.entries.size) { index ->
+                val meal = MealType.entries[index]
+                FilterChip(
+                    selected = selectedMeal == meal,
+                    onClick = { onMealSelected(meal) },
+                    label = { Text(meal.label) },
+                )
+            }
+        }
+    }
 }
 
 @Composable
