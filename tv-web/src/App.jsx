@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Room, RoomEvent } from 'livekit-client'
+import { generateViewerToken, generateRoomCode } from './lib/livekitToken'
 import './App.css'
 
 const LANDMARK_TOPIC = import.meta.env.VITE_LIVEKIT_LANDMARK_TOPIC || 'pose.binary.v2'
@@ -24,7 +25,8 @@ const POSE_CONNECTIONS = [
 
 function App() {
   const [mUrl, setMUrl] = useState(import.meta.env.VITE_LIVEKIT_URL || '')
-  const [mToken, setMToken] = useState(import.meta.env.VITE_LIVEKIT_TOKEN || '')
+  const [mRoomCode, setMRoomCode] = useState('')
+  const [mToken, setMToken] = useState('')
   const [mStatus, setMStatus] = useState('Disconnected')
   const [mError, setMError] = useState('')
   const [mDebug, setMDebug] = useState('No remote participants.')
@@ -212,6 +214,18 @@ function App() {
     }
   }
 
+  const handleGenerateRoomCode = async () => {
+    try {
+      const code = generateRoomCode()
+      const token = await generateViewerToken(code)
+      setMRoomCode(code)
+      setMToken(token)
+      setMError('')
+    } catch (error) {
+      setMError(`Failed to generate room code: ${error.message}`)
+    }
+  }
+
   const handleDisconnect = () => {
     mRoom?.disconnect()
     setMRoom(null)
@@ -232,10 +246,23 @@ function App() {
           LiveKit URL
           <input value={mUrl} onChange={(event) => setMUrl(event.target.value)} />
         </label>
-        <label>
-          Viewer token
-          <textarea value={mToken} onChange={(event) => setMToken(event.target.value)} />
-        </label>
+        <div className="actions">
+          <button disabled={!!mRoomCode} onClick={handleGenerateRoomCode}>
+            Generate Room Code
+          </button>
+        </div>
+        {mRoomCode && (
+          <div className="room-code-display">
+            <p><strong>Room Code:</strong> <span className="code">{mRoomCode}</span></p>
+            <p className="hint">Enter this code on the mobile app to connect</p>
+          </div>
+        )}
+        {mToken && (
+          <label>
+            Token (auto-generated)
+            <textarea value={mToken} readOnly />
+          </label>
+        )}
         <div className="actions">
           <button disabled={!!mRoom} onClick={handleConnect}>Connect</button>
           <button disabled={!mRoom} onClick={handleDisconnect}>Disconnect</button>

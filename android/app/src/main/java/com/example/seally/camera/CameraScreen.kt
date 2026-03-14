@@ -30,7 +30,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -260,6 +262,7 @@ fun CameraScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(onClick = {
                 mViewModel.onLensSwitchStarted()
@@ -269,6 +272,17 @@ fun CameraScreen(
             }) {
                 Text(if (uiState.mIsFrontCamera) "Back camera" else "Front camera")
             }
+            var mIsDialogOpen by remember { mutableStateOf(false) }
+            Button(onClick = { mIsDialogOpen = true }) {
+                Text("LiveKit")
+            }
+
+            LiveKitConnectionDialog(
+                mViewModel = mViewModel,
+                uiState = uiState,
+                isOpen = mIsDialogOpen,
+                onDismiss = { mIsDialogOpen = false },
+            )
         }
 
         uiState.mErrorMessage?.let { message ->
@@ -522,5 +536,84 @@ private fun StartupLoadingContent(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun LiveKitConnectionDialog(
+    mViewModel: CameraViewModel,
+    uiState: CameraUiState,
+    isOpen: Boolean,
+    onDismiss: () -> Unit,
+) {
+    var mRoomCodeInput by remember { mutableStateOf(uiState.mRoomCode) }
+
+    LaunchedEffect(isOpen) {
+        if (isOpen) {
+            mRoomCodeInput = uiState.mRoomCode
+        }
+    }
+
+    LaunchedEffect(uiState.mIsLiveKitConnected) {
+        if (uiState.mIsLiveKitConnected) {
+            onDismiss()
+        }
+    }
+
+    if (isOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Connect to LiveKit Room") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = mRoomCodeInput,
+                        onValueChange = { value ->
+                            mRoomCodeInput = value.take(6).uppercase()
+                            mViewModel.setRoomCode(mRoomCodeInput)
+                        },
+                        label = { Text("Room Code") },
+                        placeholder = { Text("e.g., ABC123") },
+                        singleLine = true,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                    Text(
+                        text = uiState.mLiveKitStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (uiState.mIsLiveKitConnected) Color.Green else Color.Gray,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                if (uiState.mIsLiveKitConnected) {
+                    Button(onClick = {
+                        mViewModel.disconnectFromLiveKit()
+                        onDismiss()
+                    }) {
+                        Text("Disconnect")
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            mViewModel.connectToLiveKit()
+                        },
+                        enabled = mRoomCodeInput.length == 6,
+                    ) {
+                        Text("Connect")
+                    }
+                }
+            },
+            dismissButton = {
+                Button(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
