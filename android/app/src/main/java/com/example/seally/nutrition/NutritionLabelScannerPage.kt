@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -87,6 +88,7 @@ data class NutritionLabelScanResult(
     val sugarsPer100g: Int = sugars,
     val fibersPer100g: Int = fibers,
     val recognizedText: String,
+    val mealType: MealType? = null,
 )
 
 private const val NUTRITION_SCANNER_LOG_TAG = "NutritionScanner"
@@ -131,6 +133,7 @@ fun NutritionLabelScannerPage(
     var mHasCameraPermission by remember { mutableStateOf(false) }
     var mIsScanning by remember { mutableStateOf(false) }
     var mStatusMessage by remember { mutableStateOf<String?>(null) }
+    var selectedMeal by rememberSaveable { mutableStateOf(MealType.Lunch) }
     val mIsBarcodeReady = true
     val mIsOcrReady = true
 
@@ -316,16 +319,17 @@ fun NutritionLabelScannerPage(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp),
+                .padding(bottom = 64.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Text(
                 text = "Point at a barcode or nutrition label",
                 color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 4.dp)
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
             FloatingActionButton(
@@ -371,7 +375,7 @@ fun NutritionLabelScannerPage(
                                                 productResult.fold(
                                                     onSuccess = { apiResult ->
                                                         mStatusMessage = null
-                                                        onScanResult(apiResult)
+                                                        onScanResult(apiResult.copy(mealType = selectedMeal))
                                                     },
                                                     onFailure = { error ->
                                                         mStatusMessage = error.message ?: "OFF lookup failed."
@@ -396,7 +400,7 @@ fun NutritionLabelScannerPage(
                                                     mStatusMessage = "No nutrition values found."
                                                 } else {
                                                     mStatusMessage = null
-                                                    onScanResult(parsedResult)
+                                                    onScanResult(parsedResult.copy(mealType = selectedMeal))
                                                 }
                                             },
                                             onFailure = { error ->
@@ -421,11 +425,7 @@ fun NutritionLabelScannerPage(
                 shape = CircleShape,
                 modifier = Modifier.size(84.dp)
             ) {
-                if (mIsScanning) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp))
-                } else {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan", modifier = Modifier.size(36.dp))
-                }
+                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan", modifier = Modifier.size(36.dp))
             }
         }
 
@@ -542,21 +542,30 @@ private fun ScannerLoadingOverlay(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            color = Color.White,
-            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 8.dp,
+            shadowElevation = 4.dp,
             modifier = Modifier.padding(48.dp)
         ) {
             Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.padding(horizontal = 32.dp, vertical = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                CircularProgressIndicator(strokeWidth = 6.dp)
-                Spacer(modifier = Modifier.height(20.dp))
+                CircularProgressIndicator(
+                    strokeWidth = 6.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = message,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
