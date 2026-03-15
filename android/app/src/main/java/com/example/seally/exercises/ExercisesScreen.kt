@@ -22,14 +22,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
-import com.example.seally.calendar.WorkoutPlanViewModel
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.camera.ExerciseType
+import com.example.seally.data.local.entity.ExerciseLogEntity
+import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import java.time.LocalDate
@@ -42,6 +42,7 @@ fun ExercisesScreen(
     onRightActionClick: () -> Unit = {},
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
     onProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
 ) {
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
@@ -54,7 +55,10 @@ fun ExercisesScreen(
 
     BackHandler(enabled = mIsOnSubpage) {
         when {
-            mSelectedExerciseForChecker != null -> mSelectedExerciseForChecker = null
+            mSelectedExerciseForChecker != null -> {
+                mCameraViewModel.persistExerciseSessionOnExit()
+                mSelectedExerciseForChecker = null
+            }
             showDumbbellPage -> showDumbbellPage = false
             showCalendar -> showCalendar = false
         }
@@ -68,7 +72,10 @@ fun ExercisesScreen(
                 mShowExerciseGuideOnEntry = true,
             )
             IconButton(
-                onClick = { mSelectedExerciseForChecker = null },
+                onClick = {
+                    mCameraViewModel.persistExerciseSessionOnExit()
+                    mSelectedExerciseForChecker = null
+                },
                 modifier = Modifier
                     .statusBarsPadding()
                     .padding(16.dp)
@@ -105,8 +112,9 @@ fun ExercisesScreen(
     }
 
     val context = LocalContext.current
-    val mWorkoutPlanViewModel: WorkoutPlanViewModel = viewModel()
-    val mTodayWorkout = mWorkoutPlanViewModel.mWorkoutPlans[LocalDate.now()].orEmpty()
+    val mExerciseLogRepository = remember(context) { ExerciseLogRepository(context.applicationContext) }
+    val mTodayDate = remember { LocalDate.now().toString() }
+    val mTodayWorkout = mExerciseLogRepository.observeByDate(mTodayDate).collectAsState(initial = emptyList()).value
     val musclesImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/seals/muscles.png")
         .build()
@@ -119,7 +127,10 @@ fun ExercisesScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            TopHeader(onProfileClick = onProfileClick)
+            TopHeader(
+                onProfileClick = onProfileClick,
+                onSettingsClick = onSettingsClick,
+            )
 
             Surface(
                 modifier = Modifier
@@ -153,7 +164,7 @@ fun ExercisesScreen(
                     } else {
                         val mSummary = mTodayWorkout
                             .take(2)
-                            .joinToString(" • ") { "${it.name.ifBlank { "Exercise" }} (${it.sets}x${it.reps})" }
+                            .joinToString(" • ") { it.toWorkoutSummary() }
                         Text(
                             text = mSummary,
                             style = MaterialTheme.typography.bodyMedium,
@@ -215,4 +226,11 @@ fun ExercisesScreen(
                 .padding(bottom = 20.dp)
         )
     }
+}
+
+private fun ExerciseLogEntity.toWorkoutSummary(): String {
+    val mName = exerciseName.ifBlank { "Exercise" }
+    val mMetricLabel = if (metric.startsWith("sets:")) "reps" else metric.ifBlank { "units" }
+    val mValueLabel = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else String.format("%.1f", quantity)
+    return "$mName ($mValueLabel $mMetricLabel)"
 }

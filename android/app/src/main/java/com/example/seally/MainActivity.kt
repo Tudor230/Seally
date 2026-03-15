@@ -98,10 +98,25 @@ class MainActivity : ComponentActivity() {
                     setResult(RESULT_OK, resultIntent)
                 }
 
-                if (profile.onboardingCompleted) {
-                    SeallyApp(mCameraViewModel = cameraViewModel)
-                } else {
-                    OnboardingScreen()
+                when (val p = profile) {
+                    null -> {
+                        // Loading state - show a clean loading screen
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(color = Color(0xFF00E5FF))
+                        }
+                    }
+                    else -> {
+                        if (p.onboardingCompleted) {
+                            SeallyApp(mCameraViewModel = cameraViewModel)
+                        } else {
+                            OnboardingScreen()
+                        }
+                    }
                 }
             }
         }
@@ -133,6 +148,7 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var shouldShowBottomBarForNutrition by rememberSaveable { mutableStateOf(true) }
     var shouldShowBottomBarForExercises by rememberSaveable { mutableStateOf(true) }
     var shouldShowProfile by rememberSaveable { mutableStateOf(false) }
+    var profileStartingDestination by rememberSaveable { mutableStateOf(com.example.seally.profile.ProfileDestination.PROFILE) }
     val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
     var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
 
@@ -204,6 +220,7 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
             if (shouldShowProfile) {
                 ProfileRoute(
                     modifier = mContentModifier.fillMaxSize(),
+                    initialDestination = profileStartingDestination,
                     onBackClick = { shouldShowProfile = false },
                 )
             } else {
@@ -211,22 +228,50 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                     AppDestinations.NUTRITION -> NutritionScreen(
                         modifier = mContentModifier,
                         onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
-                        onProfileClick = { shouldShowProfile = true },
+                        onProfileClick = { 
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                            shouldShowProfile = true 
+                        },
+                        onSettingsClick = {
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                            shouldShowProfile = true
+                        },
                         mViewModel = nutritionViewModel,
                     )
                     AppDestinations.GOALS -> GoalsScreen(
                         modifier = mContentModifier,
-                        onProfileClick = { shouldShowProfile = true },
+                        onProfileClick = { 
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                            shouldShowProfile = true 
+                        },
+                        onSettingsClick = {
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                            shouldShowProfile = true
+                        },
                     )
                     AppDestinations.HOME -> HomeScreen(
                         modifier = mContentModifier,
-                        onProfileClick = { shouldShowProfile = true },
+                        onProfileClick = { 
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                            shouldShowProfile = true 
+                        },
+                        onSettingsClick = {
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                            shouldShowProfile = true
+                        }
                     )
                     AppDestinations.EXERCISES -> ExercisesScreen(
                         modifier = mContentModifier,
                         mCameraViewModel = mCameraViewModel,
                         onDetailVisibilityChanged = { shouldShowBottomBarForExercises = it },
-                        onProfileClick = { shouldShowProfile = true },
+                        onProfileClick = { 
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                            shouldShowProfile = true 
+                        },
+                        onSettingsClick = {
+                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                            shouldShowProfile = true
+                        },
                     )
                 }
             }

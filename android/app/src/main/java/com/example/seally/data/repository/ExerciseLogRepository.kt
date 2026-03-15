@@ -11,9 +11,13 @@ class ExerciseLogRepository(context: Context) {
 
     fun observeByDate(date: String): Flow<List<ExerciseLogEntity>> = mDao.observeByDate(date)
     fun observeAll(): Flow<List<ExerciseLogEntity>> = mDao.observeAll()
+    suspend fun getByDate(date: String): List<ExerciseLogEntity> = mDao.getByDate(date)
+    suspend fun getLoggedDatesBetween(startDate: String, endDate: String): List<String> =
+        mDao.getLoggedDatesBetween(startDate = startDate, endDate = endDate)
 
     suspend fun getRecent(limit: Int = 50): List<ExerciseLogEntity> = mDao.getRecent(limit)
     suspend fun deleteByDate(date: String) = mDao.deleteByDate(date)
+    suspend fun deleteById(id: String) = mDao.deleteById(id)
 
     suspend fun addLog(
         exerciseName: String,

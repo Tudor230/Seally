@@ -12,6 +12,9 @@ interface NutritionFoodEntryDao {
     @Query("SELECT * FROM nutrition_food_entry WHERE date = :date ORDER BY id DESC")
     fun observeByDate(date: String): Flow<List<NutritionFoodEntryEntity>>
 
+    @Query("SELECT * FROM nutrition_food_entry WHERE date = :date ORDER BY id DESC")
+    suspend fun getByDate(date: String): List<NutritionFoodEntryEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: NutritionFoodEntryEntity)
 
