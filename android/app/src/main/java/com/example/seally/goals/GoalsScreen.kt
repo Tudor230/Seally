@@ -1,7 +1,6 @@
 package com.example.seally.goals
 
 import android.app.Application
-import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -54,31 +53,33 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Entity
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.PrimaryKey
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
+import com.example.seally.data.local.entity.NutritionFoodEntryEntity
+import com.example.seally.data.local.entity.NutritionLogEntity
+import com.example.seally.data.repository.DailyGoalProgressRepository
+import com.example.seally.data.repository.ExerciseLogRepository
+import com.example.seally.data.repository.NutritionFoodEntryRepository
+import com.example.seally.data.repository.NutritionLogRepository
+import com.example.seally.data.repository.TargetRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.max
 
 enum class GoalChartType {
     LINE,
     BAR,
+    LOADING_BAR,
 }
+
+private const val GOAL_CHART_HEADROOM_FACTOR = 1.08f
+private const val EXERCISE_GOAL_MAX_DAYS = 7f
 
 enum class GoalDirection {
     AT_LEAST,
@@ -91,7 +92,6 @@ enum class GoalMetric(
     val mAccentColor: Color,
     val mChartType: GoalChartType,
     val mGoalDirection: GoalDirection,
-    val mSuggestedCurrent: Float,
     val mSuggestedTarget: Float,
     val mDefaultLabels: List<String>,
     val mIcon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -102,7 +102,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFF63B95B),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 8_000f,
         mSuggestedTarget = 10_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.TrendingUp
@@ -113,7 +112,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFFE39A55),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedCurrent = 77f,
         mSuggestedTarget = 68f,
         mDefaultLabels = emptyList(),
         mIcon = Icons.Default.Flag
@@ -124,7 +122,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFFB17AE0),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 30f,
         mSuggestedTarget = 50f,
         mDefaultLabels = emptyList(),
         mIcon = Icons.Default.TrendingUp
@@ -135,7 +132,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFF4D8EFF),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 1_800f,
         mSuggestedTarget = 2_500f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.LocalDrink
@@ -146,7 +142,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFFDE7C64),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedCurrent = 2_300f,
         mSuggestedTarget = 2_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -157,7 +152,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFFE91E63),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 100f,
         mSuggestedTarget = 140f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -168,7 +162,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFF4CAF50),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedCurrent = 250f,
         mSuggestedTarget = 220f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -179,7 +172,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFFFF9800),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedCurrent = 80f,
         mSuggestedTarget = 70f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -190,7 +182,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFF9C27B0),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedCurrent = 60f,
         mSuggestedTarget = 50f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -201,7 +192,6 @@ enum class GoalMetric(
         mAccentColor = Color(0xFF795548),
         mChartType = GoalChartType.BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 20f,
         mSuggestedTarget = 30f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.Restaurant
@@ -210,9 +200,8 @@ enum class GoalMetric(
         mLabel = "Exercise",
         mUnit = "days/week",
         mAccentColor = Color(0xFF2196F3),
-        mChartType = GoalChartType.BAR,
+        mChartType = GoalChartType.LOADING_BAR,
         mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 3f,
         mSuggestedTarget = 5f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
         mIcon = Icons.Default.FitnessCenter
@@ -479,6 +468,7 @@ private fun GoalCard(
             GoalChart(
                 values = goal.mHistoryValues,
                 labels = goal.mChartLabels,
+                targetValue = goal.mTargetValue,
                 chartType = goal.mMetric.mChartType,
                 chartColor = mColor,
                 gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
@@ -487,7 +477,7 @@ private fun GoalCard(
                 isGoalCompleted = mIsGoalCompleted,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp),
+                    .height(96.dp),
             )
         }
     }
@@ -542,6 +532,8 @@ private fun GoalDetailsDialog(
                 GoalChart(
                     values = goal.mHistoryValues,
                     labels = goal.mChartLabels,
+                    valueLabels = goal.historyValueLabels(),
+                    targetValue = goal.mTargetValue,
                     chartType = goal.mMetric.mChartType,
                     chartColor = mColor,
                     gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
@@ -615,6 +607,8 @@ private fun GoalDetailsDialog(
 private fun GoalChart(
     values: List<Float>,
     labels: List<String>,
+    valueLabels: List<String> = emptyList(),
+    targetValue: Float = 1f,
     chartType: GoalChartType,
     chartColor: Color,
     gridColor: Color,
@@ -637,31 +631,69 @@ private fun GoalChart(
             val mTopY = 6.dp.toPx()
             val mBottomY = mHeight - 8.dp.toPx()
             val mChartWidth = mWidth - (mHorizontalPadding * 2f)
-            val mMaxValue = max(1f, values.maxOrNull() ?: 1f)
+            val mGoalValue = 1f
+            val mMaxEntryValue = values.maxOrNull() ?: 0f
+            val mScaleBase = max(mGoalValue, mMaxEntryValue)
+            val mScaleMax = (mScaleBase * GOAL_CHART_HEADROOM_FACTOR).coerceAtLeast(1f)
             val mStepX = if (values.size > 1) mChartWidth / (values.size - 1) else 0f
+            val mGoalLineColor = Color(
+                red = axisColor.red * 0.45f,
+                green = axisColor.green * 0.45f,
+                blue = axisColor.blue * 0.45f,
+                alpha = 1f,
+            )
+            val mGoalLineY = mBottomY - ((mBottomY - mTopY) * (mGoalValue / mScaleMax).coerceIn(0f, 1f))
 
-            listOf(0.25f, 0.5f, 0.75f).forEach { mFraction ->
-                val mY = mTopY + (mBottomY - mTopY) * mFraction
-                val mDashWidth = 6.dp.toPx()
-                val mGap = 5.dp.toPx()
-                var mX = mHorizontalPadding
-                while (mX < mWidth - mHorizontalPadding) {
+            if (chartType == GoalChartType.LOADING_BAR) {
+                val mLastRatio = values.lastOrNull()?.coerceAtLeast(0f) ?: 0f
+                val mTargetDays = targetValue.coerceIn(1f, EXERCISE_GOAL_MAX_DAYS)
+                val mCurrentDays = (mLastRatio * mTargetDays).coerceAtLeast(0f)
+                val mProgress = (mCurrentDays / EXERCISE_GOAL_MAX_DAYS).coerceIn(0f, 1f)
+                val mTrackTop = mTopY + ((mBottomY - mTopY) * 0.38f)
+                val mTrackHeight = (mBottomY - mTopY) * 0.28f
+                val mTrackWidth = mChartWidth
+                val mFillWidth = mTrackWidth * mProgress
+                val mSegmentWidth = mTrackWidth / EXERCISE_GOAL_MAX_DAYS
+                val mGoalMarkerX = mHorizontalPadding + (mSegmentWidth * mTargetDays)
+
+                drawRoundRect(
+                    color = axisColor.copy(alpha = 0.22f),
+                    topLeft = Offset(mHorizontalPadding, mTrackTop),
+                    size = Size(mTrackWidth, mTrackHeight),
+                    cornerRadius = CornerRadius(mTrackHeight / 2f, mTrackHeight / 2f),
+                )
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(chartColor.copy(alpha = 0.9f), chartColor),
+                    ),
+                    topLeft = Offset(mHorizontalPadding, mTrackTop),
+                    size = Size(mFillWidth, mTrackHeight),
+                    cornerRadius = CornerRadius(mTrackHeight / 2f, mTrackHeight / 2f),
+                )
+                for (segment in 1 until EXERCISE_GOAL_MAX_DAYS.toInt()) {
+                    val mX = mHorizontalPadding + (mSegmentWidth * segment)
                     drawLine(
-                        color = gridColor,
-                        start = Offset(mX, mY),
-                        end = Offset((mX + mDashWidth).coerceAtMost(mWidth - mHorizontalPadding), mY),
+                        color = axisColor.copy(alpha = 0.3f),
+                        start = Offset(mX, mTrackTop + 1.dp.toPx()),
+                        end = Offset(mX, mTrackTop + mTrackHeight - 1.dp.toPx()),
                         strokeWidth = 1.dp.toPx(),
                     )
-                    mX += mDashWidth + mGap
                 }
-            }
-
-            if (chartType == GoalChartType.BAR) {
-                val mBarWidth = (mChartWidth / values.size) * if (isGoalCompleted) 0.74f else 0.58f
+                drawLine(
+                    color = axisColor.copy(alpha = 0.95f),
+                    start = Offset(mGoalMarkerX, mTrackTop - 4.dp.toPx()),
+                    end = Offset(mGoalMarkerX, mTrackTop + mTrackHeight + 4.dp.toPx()),
+                    strokeWidth = 3.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            } else if (chartType == GoalChartType.BAR) {
+                val mSlotWidth = mChartWidth / values.size
+                val mBarWidth = mSlotWidth * if (isGoalCompleted) 0.74f else 0.58f
                 values.forEachIndexed { mIndex, mValue ->
-                    val mNormalized = (mValue / mMaxValue).coerceIn(0f, 1f)
+                    val mNormalized = (mValue / mScaleMax).coerceIn(0f, 1f)
                     val mBarHeight = (mBottomY - mTopY) * mNormalized
-                    val mLeft = mHorizontalPadding + (mIndex * (mChartWidth / values.size)) + 3.dp.toPx()
+                    val mCenterX = mHorizontalPadding + (mIndex * mSlotWidth) + (mSlotWidth / 2f)
+                    val mLeft = mCenterX - (mBarWidth / 2f)
                     drawRoundRect(
                         brush = Brush.verticalGradient(
                             colors = listOf(chartColor, chartColor.copy(alpha = 0.4f)),
@@ -674,7 +706,7 @@ private fun GoalChart(
             } else {
                 val mPoints = values.mapIndexed { mIndex, mValue ->
                     val mX = mHorizontalPadding + mIndex * mStepX
-                    val mNormalized = (mValue / mMaxValue).coerceIn(0f, 1f)
+                    val mNormalized = (mValue / mScaleMax).coerceIn(0f, 1f)
                     val mY = mBottomY - ((mBottomY - mTopY) * mNormalized)
                     Offset(mX, mY)
                 }
@@ -723,26 +755,54 @@ private fun GoalChart(
                 }
             }
 
-            drawLine(
-                color = axisColor,
-                start = Offset(mHorizontalPadding, mBottomY),
-                end = Offset(mWidth - mHorizontalPadding, mBottomY),
-                strokeWidth = 1.4.dp.toPx(),
-            )
+            if (chartType != GoalChartType.LOADING_BAR) {
+                drawLine(
+                    color = mGoalLineColor,
+                    start = Offset(mHorizontalPadding, mGoalLineY),
+                    end = Offset(mWidth - mHorizontalPadding, mGoalLineY),
+                    strokeWidth = 3.2.dp.toPx(),
+                )
+
+                drawLine(
+                    color = axisColor.copy(alpha = 0.45f),
+                    start = Offset(mHorizontalPadding, mBottomY),
+                    end = Offset(mWidth - mHorizontalPadding, mBottomY),
+                    strokeWidth = 1.2.dp.toPx(),
+                )
+            }
         }
 
-        if (labels.isNotEmpty()) {
+        if (labels.isNotEmpty() && chartType != GoalChartType.LOADING_BAR) {
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp),
+                    .padding(horizontal = 4.dp),
             ) {
                 labels.forEach { mLabel ->
                     Text(
                         text = mLabel,
                         color = labelColor,
                         style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        if (valueLabels.isNotEmpty() && chartType != GoalChartType.LOADING_BAR) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+            ) {
+                valueLabels.forEach { mValue ->
+                    Text(
+                        text = mValue,
+                        color = labelColor.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.labelSmall,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f),
                     )
@@ -790,8 +850,10 @@ private fun AddGoalDialog(
         }
     }
 
-    val mTarget = mTargetValue.toFloatOrNull() ?: 0f
-    val mCanAdd = mSelectedMetric != null && mTarget > 0f
+    val mParsedTarget = mTargetValue.toFloatOrNull() ?: 0f
+    val mExerciseTargetTooHigh = mSelectedMetric == GoalMetric.EXERCISE_DAYS && mParsedTarget > EXERCISE_GOAL_MAX_DAYS
+    val mTarget = mParsedTarget
+    val mCanAdd = mSelectedMetric != null && mTarget > 0f && !mExerciseTargetTooHigh
 
     if (mShowWarningDialog) {
         AlertDialog(
@@ -804,7 +866,7 @@ private fun AddGoalDialog(
                 Button(
                     onClick = {
                         mShowWarningDialog = false
-                        mSelectedMetric?.let { onGoalAdded(it, it.mSuggestedCurrent, mTarget) }
+                        mSelectedMetric?.let { onGoalAdded(it, 0f, mTarget) }
                     },
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -888,13 +950,21 @@ private fun AddGoalDialog(
                     )
                     OutlinedTextField(
                         value = mTargetValue,
-                        onValueChange = { mTargetValue = it },
+                        onValueChange = { newValue ->
+                            mTargetValue = newValue.filter(Char::isDigit)
+                        },
                         singleLine = true,
                         placeholder = { Text("Enter value") },
                         suffix = { mSelectedMetric?.let { Text(it.mUnit, fontWeight = FontWeight.Bold) } },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        isError = mExerciseTargetTooHigh,
+                        supportingText = {
+                            if (mExerciseTargetTooHigh) {
+                                Text("Exercise goal cannot be greater than 7 days per week.")
+                            }
+                        },
                         shape = RoundedCornerShape(20.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = mSelectedMetric?.mAccentColor ?: MaterialTheme.colorScheme.primary,
@@ -942,7 +1012,7 @@ private fun AddGoalDialog(
                         if (logicalDirection != null && logicalDirection != mSelectedDirection) {
                             mShowWarningDialog = true
                         } else {
-                            onGoalAdded(metric, metric.mSuggestedCurrent, mTarget) 
+                            onGoalAdded(metric, 0f, mTarget)
                         }
                     } 
                 },
@@ -998,38 +1068,6 @@ private fun GoalDirectionButton(
     }
 }
 
-private fun buildDefaultGoals(): List<GoalUiModel> = listOf(
-    GoalUiModel(
-        mId = 1L,
-        mMetric = GoalMetric.STEPS,
-        mCurrentValue = 7_200f,
-        mTargetValue = 10_000f,
-        mHistoryValues = listOf(0.18f, 0.25f, 0.43f, 0.39f, 0.57f, 0.44f, 0.53f),
-        mChartLabels = GoalMetric.STEPS.mDefaultLabels,
-    ),
-    GoalUiModel(
-        mId = 3L,
-        mMetric = GoalMetric.WATER,
-        mCurrentValue = 1_700f,
-        mTargetValue = 2_500f,
-        mHistoryValues = listOf(0.35f, 0.42f, 0.48f, 0.55f, 0.62f, 0.64f, 0.68f),
-        mChartLabels = GoalMetric.WATER.mDefaultLabels,
-    ),
-)
-
-private fun buildTrendValues(progress: Float): List<Float> {
-    val mEnd = progress.coerceIn(0.15f, 1f)
-    return listOf(
-        (mEnd * 0.35f).coerceAtLeast(0.1f),
-        (mEnd * 0.42f).coerceAtLeast(0.13f),
-        (mEnd * 0.58f).coerceAtLeast(0.16f),
-        (mEnd * 0.5f).coerceAtLeast(0.14f),
-        (mEnd * 0.72f).coerceAtLeast(0.2f),
-        (mEnd * 0.64f).coerceAtLeast(0.18f),
-        mEnd,
-    )
-}
-
 fun GoalUiModel.progress(): Float {
     return mMetric.calculateProgress(
         currentValue = mCurrentValue,
@@ -1045,6 +1083,12 @@ private fun GoalUiModel.formatCurrent(): String = formatMetricValue(mCurrentValu
 
 private fun GoalUiModel.formatTarget(): String = formatMetricValue(mTargetValue, mMetric)
 
+private fun GoalUiModel.historyValueLabels(): List<String> {
+    return mHistoryValues.map { mRatio ->
+        formatCompactMetricValue(mRatio * mTargetValue)
+    }
+}
+
 private fun formatMetricValue(value: Float, metric: GoalMetric): String {
     val mFormattedValue = if (value % 1f == 0f) {
         String.format(Locale.US, "%,d", value.toInt())
@@ -1052,6 +1096,14 @@ private fun formatMetricValue(value: Float, metric: GoalMetric): String {
         String.format(Locale.US, "%,.1f", value)
     }
     return "$mFormattedValue ${metric.mUnit}"
+}
+
+private fun formatCompactMetricValue(value: Float): String {
+    return when {
+        value >= 1000f -> String.format(Locale.US, "%.1fk", value / 1000f)
+        value % 1f == 0f -> String.format(Locale.US, "%d", value.toInt())
+        else -> String.format(Locale.US, "%.1f", value)
+    }
 }
 
 private fun GoalMetric.calculateProgress(
@@ -1063,8 +1115,8 @@ private fun GoalMetric.calculateProgress(
     return when (mGoalDirection) {
         GoalDirection.AT_LEAST -> (currentValue / targetValue).coerceIn(0f, 1f)
         GoalDirection.AT_MOST -> {
-            if (currentValue <= 0f) {
-                1f
+            if (currentValue <= targetValue) {
+                (currentValue / targetValue).coerceIn(0f, 1f)
             } else {
                 (targetValue / currentValue).coerceIn(0f, 1f)
             }
@@ -1082,159 +1134,79 @@ private fun Float?.toInputValue(): String {
     }
 }
 
-@Entity(tableName = "goals")
-data class GoalEntity(
-    @PrimaryKey
-    val mId: Long,
-    val mMetricKey: String,
-    val mCurrentValue: Float,
-    val mTargetValue: Float,
-    val mHistoryValues: String,
-    val mChartLabels: String,
-)
-
-@Dao
-interface GoalDao {
-    @Query("SELECT * FROM goals ORDER BY mId ASC")
-    fun observeAll(): Flow<List<GoalEntity>>
-
-    @Query("SELECT * FROM goals ORDER BY mId ASC")
-    suspend fun getAll(): List<GoalEntity>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(goal: GoalEntity)
-
-    @Query("DELETE FROM goals WHERE mId = :id")
-    suspend fun deleteById(id: Long)
-
-    @Query("DELETE FROM goals")
-    suspend fun deleteAll()
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(goals: List<GoalEntity>)
-}
-
-@Database(
-    entities = [GoalEntity::class],
-    version = 1,
-    exportSchema = false,
-)
-abstract class GoalsDatabase : RoomDatabase() {
-    abstract fun goalDao(): GoalDao
-
-    companion object {
-        @Volatile
-        private var mInstance: GoalsDatabase? = null
-
-        fun getInstance(context: Context): GoalsDatabase {
-            return mInstance ?: synchronized(this) {
-                mInstance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    GoalsDatabase::class.java,
-                    "seally_goals.db",
-                ).build().also { mInstance = it }
-            }
-        }
-    }
-}
-
-private class GoalsRepository(
-    private val mGoalDao: GoalDao,
-) {
-    suspend fun getGoals(): List<GoalUiModel> {
-        return mGoalDao.getAll().mapNotNull { mEntity ->
-            val mMetric = GoalMetric.entries.firstOrNull { it.name == mEntity.mMetricKey }
-                ?: return@mapNotNull null
-            GoalUiModel(
-                mId = mEntity.mId,
-                mMetric = mMetric,
-                mCurrentValue = mEntity.mCurrentValue,
-                mTargetValue = mEntity.mTargetValue,
-                mHistoryValues = decodeFloatList(mEntity.mHistoryValues),
-                mChartLabels = decodeStringList(mEntity.mChartLabels),
-            )
-        }
-    }
-
-    fun observeGoals(): Flow<List<GoalUiModel>> {
-        return mGoalDao.observeAll().map { entities ->
-            entities.mapNotNull { mEntity ->
-                val mMetric = GoalMetric.entries.firstOrNull { it.name == mEntity.mMetricKey }
-                    ?: return@mapNotNull null
-                GoalUiModel(
-                    mId = mEntity.mId,
-                    mMetric = mMetric,
-                    mCurrentValue = mEntity.mCurrentValue,
-                    mTargetValue = mEntity.mTargetValue,
-                    mHistoryValues = decodeFloatList(mEntity.mHistoryValues),
-                    mChartLabels = decodeStringList(mEntity.mChartLabels),
-                )
-            }
-        }
-    }
-
-    suspend fun upsertGoal(goal: GoalUiModel) {
-        mGoalDao.upsert(goal.toEntity())
-    }
-
-    suspend fun deleteGoal(id: Long) {
-        mGoalDao.deleteById(id)
-    }
-
-    suspend fun replaceAllGoals(goals: List<GoalUiModel>) {
-        mGoalDao.deleteAll()
-        mGoalDao.insertAll(goals.map { it.toEntity() })
-    }
-
-    private fun GoalUiModel.toEntity(): GoalEntity {
-        return GoalEntity(
-            mId = mId,
-            mMetricKey = mMetric.name,
-            mCurrentValue = mCurrentValue,
-            mTargetValue = mTargetValue,
-            mHistoryValues = encodeFloatList(mHistoryValues),
-            mChartLabels = encodeStringList(mChartLabels),
-        )
-    }
-
-    private fun encodeFloatList(values: List<Float>): String = values.joinToString(",")
-
-    private fun decodeFloatList(encoded: String): List<Float> {
-        if (encoded.isBlank()) return emptyList()
-        return encoded.split(",").mapNotNull { it.toFloatOrNull() }
-    }
-
-    private fun encodeStringList(values: List<String>): String = values.joinToString("|")
-
-    private fun decodeStringList(encoded: String): List<String> {
-        if (encoded.isBlank()) return emptyList()
-        return encoded.split("|")
-    }
-}
-
 class GoalsViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
-    private val mRepository = GoalsRepository(
-        mGoalDao = GoalsDatabase.getInstance(application).goalDao(),
-    )
+    private val mTargetRepository = TargetRepository(application)
+    private val mDailyGoalProgressRepository = DailyGoalProgressRepository(application)
+    private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
+    private val mNutritionLogRepository = NutritionLogRepository(application)
+    private val mExerciseLogRepository = ExerciseLogRepository(application)
 
     private val mGoalsState = MutableStateFlow<List<GoalUiModel>>(emptyList())
     val mGoals: StateFlow<List<GoalUiModel>> = mGoalsState.asStateFlow()
+    private var mHasBackfilledRecentHistory = false
 
     init {
-        // 1) Ensure defaults exist
         viewModelScope.launch(Dispatchers.IO) {
-            val mStoredGoals = mRepository.getGoals()
-            if (mStoredGoals.isEmpty()) {
-                mRepository.replaceAllGoals(buildDefaultGoals())
-            }
-        }
+            val today = LocalDate.now().toString()
+            combine(
+                mTargetRepository.observeTargets(),
+                mDailyGoalProgressRepository.observeByDate(today),
+                mNutritionFoodEntryRepository.observeByDate(today),
+                mNutritionLogRepository.observeByDate(today),
+                mExerciseLogRepository.observeByDate(today),
+            ) { targets, todayProgress, foodEntries, nutritionLog, _ ->
+                GoalSyncSnapshot(
+                    mTargets = targets,
+                    mTodayProgress = todayProgress,
+                    mFoodEntries = foodEntries,
+                    mNutritionLog = nutritionLog,
+                )
+            }.collect { snapshot ->
+                if (!mHasBackfilledRecentHistory) {
+                    backfillDerivedGoalProgressForRecentDays(snapshot.mTargets)
+                    mHasBackfilledRecentHistory = true
+                }
 
-        // 2) Always observe the DB so UI refreshes instantly on any change
-        viewModelScope.launch {
-            mRepository.observeGoals().collect { mGoalsFromDb ->
-                mGoalsState.value = mGoalsFromDb
+                syncDerivedGoalProgressForDate(
+                    date = today,
+                    targets = snapshot.mTargets,
+                    existingProgressForDate = snapshot.mTodayProgress,
+                    derivedProgress = deriveProgressFromDailySources(
+                        date = today,
+                        foodEntries = snapshot.mFoodEntries,
+                        nutritionLog = snapshot.mNutritionLog,
+                    ),
+                )
+
+                val progressMap = snapshot.mTodayProgress.associateBy { it.goalName }
+                val uiModels = snapshot.mTargets.mapNotNull { target ->
+                    val metric = GoalMetric.entries.firstOrNull { it.name == target.goalName } ?: return@mapNotNull null
+                    val todayCurrentValue = progressMap[target.goalName]?.progressValue?.toFloat() ?: 0f
+                    val historyDates = (HISTORY_POINT_COUNT - 1 downTo 0)
+                        .map { offset -> LocalDate.now().minusDays(offset.toLong()).toString() }
+                    val progressByDate = mDailyGoalProgressRepository
+                        .getRecentByGoalName(target.goalName, HISTORY_LOOKBACK_COUNT)
+                        .associateBy { it.date }
+                    val recentProgress = historyDates.map { date ->
+                        val currentValue = progressByDate[date]?.progressValue?.toFloat() ?: 0f
+                        if (target.targetValue > 0.0) {
+                            (currentValue / target.targetValue.toFloat()).coerceAtLeast(0f)
+                        } else {
+                            0f
+                        }
+                    }
+                    GoalUiModel(
+                        mId = metric.toGoalId(),
+                        mMetric = metric,
+                        mCurrentValue = todayCurrentValue,
+                        mTargetValue = target.targetValue.toFloat(),
+                        mHistoryValues = recentProgress,
+                        mChartLabels = metric.mDefaultLabels,
+                    )
+                }
+                mGoalsState.value = uiModels.sortedBy { it.mId }
             }
         }
     }
@@ -1245,28 +1217,124 @@ class GoalsViewModel(
         mTarget: Float,
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val mCurrentGoals = mGoalsState.value
-            val mNextId = (mCurrentGoals.maxOfOrNull { it.mId } ?: 0L) + 1L
-            val mProgress = mMetric.calculateProgress(mCurrent, mTarget)
-            val mNewGoal = GoalUiModel(
-                mId = mNextId,
-                mMetric = mMetric,
-                mCurrentValue = mCurrent,
-                mTargetValue = mTarget,
-                mHistoryValues = buildTrendValues(mProgress),
-                mChartLabels = mMetric.mDefaultLabels,
+            if (mMetric == GoalMetric.EXERCISE_DAYS && mTarget > EXERCISE_GOAL_MAX_DAYS) {
+                return@launch
+            }
+            val mGoalName = mMetric.name
+            val mTargetToSave = if (mMetric == GoalMetric.EXERCISE_DAYS) {
+                mTarget.coerceIn(1f, EXERCISE_GOAL_MAX_DAYS)
+            } else {
+                mTarget
+            }
+            mTargetRepository.upsertTarget(
+                goalName = mGoalName,
+                targetValue = mTargetToSave.toDouble(),
             )
-            mRepository.upsertGoal(mNewGoal)
+            mDailyGoalProgressRepository.setProgress(
+                goalName = mGoalName,
+                date = LocalDate.now().toString(),
+                progressValue = mCurrent.toDouble(),
+            )
         }
     }
 
     fun deleteGoal(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            mRepository.deleteGoal(id)
+            val goalName = GoalMetric.entries.firstOrNull { it.toGoalId() == id }?.name ?: return@launch
+            mTargetRepository.deleteByGoalName(goalName)
         }
     }
 
+    private suspend fun syncDerivedGoalProgressForDate(
+        date: String,
+        targets: List<com.example.seally.data.local.entity.TargetEntity>,
+        existingProgressForDate: List<com.example.seally.data.local.entity.DailyGoalProgressEntity>,
+        derivedProgress: Map<String, Double>,
+    ) {
+        if (derivedProgress.isEmpty()) return
+
+        val currentProgress = existingProgressForDate.associateBy { it.goalName }
+        for ((goalName, progressValue) in derivedProgress) {
+            if (targets.none { it.goalName == goalName }) continue
+            val existingValue = currentProgress[goalName]?.progressValue
+            if (existingValue == null || kotlin.math.abs(existingValue - progressValue) > PROGRESS_EPSILON) {
+                mDailyGoalProgressRepository.setProgressIfTargetExists(
+                    goalName = goalName,
+                    date = date,
+                    progressValue = progressValue,
+                )
+            }
+        }
+    }
+
+    private suspend fun backfillDerivedGoalProgressForRecentDays(
+        targets: List<com.example.seally.data.local.entity.TargetEntity>,
+    ) {
+        val dates = (HISTORY_POINT_COUNT - 1 downTo 0)
+            .map { offset -> LocalDate.now().minusDays(offset.toLong()).toString() }
+        for (date in dates) {
+            val foodEntries = mNutritionFoodEntryRepository.getByDate(date)
+            val nutritionLog = mNutritionLogRepository.getByDate(date)
+            val progressForDate = mDailyGoalProgressRepository.getByDate(date)
+            syncDerivedGoalProgressForDate(
+                date = date,
+                targets = targets,
+                existingProgressForDate = progressForDate,
+                derivedProgress = deriveProgressFromDailySources(
+                    date = date,
+                    foodEntries = foodEntries,
+                    nutritionLog = nutritionLog,
+                ),
+            )
+        }
+    }
+
+    private suspend fun deriveProgressFromDailySources(
+        date: String,
+        foodEntries: List<NutritionFoodEntryEntity>,
+        nutritionLog: NutritionLogEntity?,
+    ): Map<String, Double> {
+        val calories = foodEntries.sumOf { it.calories }.toDouble()
+        val protein = foodEntries.sumOf { it.protein }.toDouble()
+        val carbs = foodEntries.sumOf { it.carbs }.toDouble()
+        val fats = foodEntries.sumOf { it.fats }.toDouble()
+        val sugars = foodEntries.sumOf { it.sugars }.toDouble()
+        val fibers = foodEntries.sumOf { it.fibers }.toDouble()
+        val water = (nutritionLog?.waterMl ?: 0).coerceAtLeast(0).toDouble()
+        val exerciseDaysInWeek = countExerciseDaysInWindow(endDate = date).toDouble()
+
+        return mapOf(
+            GoalMetric.WATER.name to water,
+            GoalMetric.CALORIES.name to calories,
+            GoalMetric.PROTEIN.name to protein,
+            GoalMetric.CARBS.name to carbs,
+            GoalMetric.FATS.name to fats,
+            GoalMetric.SUGARS.name to sugars,
+            GoalMetric.FIBERS.name to fibers,
+            GoalMetric.EXERCISE_DAYS.name to exerciseDaysInWeek,
+        )
+    }
+
+    private suspend fun countExerciseDaysInWindow(endDate: String): Int {
+        val mEndDate = LocalDate.parse(endDate)
+        val mStartDate = mEndDate.minusDays((HISTORY_POINT_COUNT - 1).toLong()).toString()
+        return mExerciseLogRepository
+            .getLoggedDatesBetween(startDate = mStartDate, endDate = endDate)
+            .size
+    }
+
+    private data class GoalSyncSnapshot(
+        val mTargets: List<com.example.seally.data.local.entity.TargetEntity>,
+        val mTodayProgress: List<com.example.seally.data.local.entity.DailyGoalProgressEntity>,
+        val mFoodEntries: List<NutritionFoodEntryEntity>,
+        val mNutritionLog: NutritionLogEntity?,
+    )
+
     companion object {
+        private const val HISTORY_POINT_COUNT = 7
+        private const val HISTORY_LOOKBACK_COUNT = 30
+        private const val PROGRESS_EPSILON = 0.0001
+
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: androidx.lifecycle.viewmodel.CreationExtras): T {
@@ -1276,3 +1344,5 @@ class GoalsViewModel(
         }
     }
 }
+
+private fun GoalMetric.toGoalId(): Long = ordinal.toLong() + 1L
