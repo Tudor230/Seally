@@ -308,6 +308,7 @@ fun NutritionScreen(
     modifier: Modifier = Modifier,
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
     onProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     mViewModel: NutritionViewModel = viewModel(),
 ) {
     val calorieTarget = 2200
@@ -384,7 +385,10 @@ fun NutritionScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (currentPage == NutritionPage.Kitchen) {
-                TopHeader(onProfileClick = onProfileClick)
+                TopHeader(
+                    onProfileClick = onProfileClick,
+                    onSettingsClick = onSettingsClick,
+                )
             }
 
             Box(modifier = Modifier.weight(1f)) {

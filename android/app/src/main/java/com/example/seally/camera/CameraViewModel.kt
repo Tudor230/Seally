@@ -27,7 +27,7 @@ data class CameraUiState(
     val mHasCameraPermission: Boolean = false,
     val mHasCompletedInitialPermissionCheck: Boolean = false,
     val mIsStartupCameraLoading: Boolean = false,
-    val mIsFrontCamera: Boolean = true,
+    val mIsFrontCamera: Boolean = false,
     val mLandmarks: List<NormalizedLandmark> = emptyList(),
     val mWorldLandmarks: List<Landmark> = emptyList(),
     val mErrorMessage: String? = null,
