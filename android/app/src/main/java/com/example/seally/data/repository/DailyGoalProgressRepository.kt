@@ -16,8 +16,16 @@ class DailyGoalProgressRepository(context: Context) {
         return mDao.observeByDate(date)
     }
 
+    suspend fun getByDate(date: String): List<DailyGoalProgressEntity> {
+        return mDao.getByDate(date)
+    }
+
     suspend fun getByGoalAndDate(goalName: String, date: String): DailyGoalProgressEntity? {
         return mDao.getByGoalAndDate(goalName, date)
+    }
+
+    suspend fun getRecentByGoalName(goalName: String, limit: Int): List<DailyGoalProgressEntity> {
+        return mDao.getRecentByGoalName(goalName, limit)
     }
 
     suspend fun setProgress(goalName: String, date: String, progressValue: Double) {
@@ -27,6 +35,14 @@ class DailyGoalProgressRepository(context: Context) {
                 date = date,
                 progressValue = progressValue,
             ),
+        )
+    }
+
+    suspend fun setProgressIfTargetExists(goalName: String, date: String, progressValue: Double) {
+        mDao.upsertIfTargetExists(
+            goalName = goalName,
+            date = date,
+            progressValue = progressValue,
         )
     }
 }

@@ -70,9 +70,7 @@ class SquatFormFeedbackEngine {
             }
         }
 
-        if (mCurrentPhase == MovementPhase.STANDING) {
-            mMinKneeAngleInRep = Float.MAX_VALUE
-        } else {
+        if (mCurrentPhase != MovementPhase.STANDING) {
             mMinKneeAngleInRep = minOf(mMinKneeAngleInRep, smoothedKneeAngle)
         }
 
@@ -108,6 +106,10 @@ class SquatFormFeedbackEngine {
             mRepCount += 1
             mHasReachedDepthInCurrentRep = false
             mHasAnnouncedNowUpInCurrentRep = false
+        }
+
+        if (mCurrentPhase == MovementPhase.STANDING) {
+            mMinKneeAngleInRep = Float.MAX_VALUE
         }
 
         mLastSmoothedKneeAngle = smoothedKneeAngle

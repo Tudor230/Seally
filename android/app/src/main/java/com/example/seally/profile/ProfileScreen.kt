@@ -1,7 +1,7 @@
 package com.example.seally.profile
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.seally.ui.components.AppScreenBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,22 +40,24 @@ fun ProfileScreen(
             .build()
     }
 
-    // --- Visual tokens (slightly rounded but still "pixel/card" friendly) ---
-    val fieldShape = RoundedCornerShape(10.dp)
-    val cardShape = RoundedCornerShape(14.dp)
-    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    val container = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)
+    // --- Visual tokens ---
+    val fieldShape = RoundedCornerShape(12.dp)
+    val cardShape = RoundedCornerShape(24.dp)
+    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+    val container = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val backgroundColor = MaterialTheme.colorScheme.background
 
     @Composable
     fun friendlyOutlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = outline,
         errorBorderColor = MaterialTheme.colorScheme.error,
-        focusedContainerColor = container,
-        unfocusedContainerColor = container,
-        errorContainerColor = container,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
         focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
     )
 
     // State Management
@@ -67,11 +68,15 @@ fun ProfileScreen(
 
     // Sync state with Profile data
     LaunchedEffect(profile) {
-        name = profile.name
-        heightCmText = profile.heightCm?.toString().orEmpty()
-        weightKgText = profile.weightKg?.let { stripTrailingZeros(it) }.orEmpty()
-        goalWeightKgText = profile.goalWeightKg?.let { stripTrailingZeros(it) }.orEmpty()
+        profile?.let { currentProfile ->
+            name = currentProfile.name
+            heightCmText = currentProfile.heightCm?.toString().orEmpty()
+            weightKgText = currentProfile.weightKg?.let { stripTrailingZeros(it) }.orEmpty()
+            goalWeightKgText = currentProfile.goalWeightKg?.let { stripTrailingZeros(it) }.orEmpty()
+        }
     }
+
+    val currentProfile = profile ?: UserProfile()
 
     // Validation Logic
     val heightCm = heightCmText.toIntOrNull()
@@ -85,141 +90,133 @@ fun ProfileScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = backgroundColor,
         topBar = {
-            Column {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Character stats",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
-                            )
-                            Text(
-                                text = "Set up once, tweak anytime",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        AsyncImage(
-                            model = profilePictureRequest,
-                            contentDescription = "Profile picture",
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-                                .size(44.dp)
-                                .clip(CircleShape)
-
-                        )
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "Character stats",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
+                },
+                actions = {
+                    AsyncImage(
+                        model = profilePictureRequest,
+                        contentDescription = "Profile picture",
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                    )
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = backgroundColor,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
-                HorizontalDivider(thickness = 1.dp, color = outline)
-            }
+            )
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AppScreenBackground(assetPath = "backgrounds/form_validator.png")
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = cardShape,
+                color = container,
+                border = BorderStroke(1.dp, outline),
             ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = cardShape,
-                    colors = CardDefaults.cardColors(containerColor = container),
-                    border = BorderStroke(1.dp, outline),
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Text(
-                            text = "Basic info",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Text(
+                        text = "Basic info",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
 
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name") },
+                        placeholder = { Text("e.g., Ioana") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = fieldShape,
+                        colors = friendlyOutlinedTextFieldColors(),
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text("Name") },
-                            placeholder = { Text("e.g., Ioana") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
+                            value = heightCmText,
+                            onValueChange = { heightCmText = it.filterNumeric(3) },
+                            label = { Text("Height") },
+                            placeholder = { Text("cm") },
+                            modifier = Modifier.weight(1f),
+                            isError = heightError,
                             shape = fieldShape,
                             colors = friendlyOutlinedTextFieldColors(),
-
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            supportingText = {
+                                if (heightError) {
+                                    Text("50–260 cm", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
                         )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OutlinedTextField(
-                                value = heightCmText,
-                                onValueChange = { heightCmText = it.filterNumeric(3) },
-                                label = { Text("Height") },
-                                placeholder = { Text("cm") },
-                                modifier = Modifier.weight(1f),
-                                isError = heightError,
-                                shape = fieldShape,
-                                colors = friendlyOutlinedTextFieldColors(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                supportingText = {
-                                    Text(
-                                        text = if (heightError) "50–260 cm" else "",
-                                        color = if (heightError) MaterialTheme.colorScheme.error else Color.Transparent,
-                                    )
-                                }
-                            )
-
-                            OutlinedTextField(
-                                value = weightKgText,
-                                onValueChange = { weightKgText = it.filterDecimal(6) },
-                                label = { Text("Current weight") },
-                                placeholder = { Text("kg") },
-                                modifier = Modifier.weight(1f),
-                                isError = weightError,
-                                shape = fieldShape,
-                                colors = friendlyOutlinedTextFieldColors(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                supportingText = {
-                                    Text(
-                                        text = if (weightError) "20–400 kg" else "",
-                                        color = if (weightError) MaterialTheme.colorScheme.error else Color.Transparent,
-                                    )
-                                }
-                            )
-                        }
-
                         OutlinedTextField(
-                            value = goalWeightKgText,
-                            onValueChange = { goalWeightKgText = it.filterDecimal(6) },
-                            label = { Text("Goal weight") },
+                            value = weightKgText,
+                            onValueChange = { weightKgText = it.filterDecimal(6) },
+                            label = { Text("Weight") },
                             placeholder = { Text("kg") },
-                            modifier = Modifier.fillMaxWidth(),
-                            isError = goalWeightError,
+                            modifier = Modifier.weight(1f),
+                            isError = weightError,
                             shape = fieldShape,
                             colors = friendlyOutlinedTextFieldColors(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-
+                            supportingText = {
+                                if (weightError) {
+                                    Text("20–400 kg", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
                         )
                     }
+
+                    OutlinedTextField(
+                        value = goalWeightKgText,
+                        onValueChange = { goalWeightKgText = it.filterDecimal(6) },
+                        label = { Text("Goal weight") },
+                        placeholder = { Text("kg") },
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = goalWeightError,
+                        shape = fieldShape,
+                        colors = friendlyOutlinedTextFieldColors(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        supportingText = {
+                            if (goalWeightError) {
+                                Text("20–400 kg", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    )
                 }
+            }
 
             Button(
                 onClick = {
@@ -229,32 +226,35 @@ fun ProfileScreen(
                             heightCm = heightCm,
                             weightKg = weightKg,
                             goalWeightKg = goalWeightKg,
-                            activityType = profile.activityType,
-                            workoutDaysPerWeek = profile.workoutDaysPerWeek,
-                            journeyGoal = profile.journeyGoal,
-                            waterTargetMl = profile.waterTargetMl,
-                            onboardingCompleted = profile.onboardingCompleted,
+                            activityType = currentProfile.activityType,
+                            workoutDaysPerWeek = currentProfile.workoutDaysPerWeek,
+                            journeyGoal = currentProfile.journeyGoal,
+                            waterTargetMl = currentProfile.waterTargetMl,
+                            onboardingCompleted = currentProfile.onboardingCompleted,
                         )
                     )
                     onBackClick()
                 },
-                    enabled = canSave,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                ) {
-                    Text(
-                        text = "Save",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+                enabled = canSave,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00E5FF),
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                )
+            ) {
+                Text(
+                    text = "SAVE CHANGES",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
 }
-
-// --- Helper Functions (Ensuring these match your existing logic) ---
 
 private fun String.filterNumeric(maxLen: Int): String {
     val filtered = filter { it.isDigit() }
