@@ -221,17 +221,7 @@ fun ExercisesScreen(
                 Icon(Icons.Default.DateRange, contentDescription = "History", modifier = Modifier.size(32.dp))
             }
         }
-
-        // Seal/character - consistent anchoring
-        AsyncImage(
-            model = musclesImageRequest,
-            contentDescription = "Seal",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.75f)
-                .padding(bottom = 20.dp)
-        )
+        
     }
 }
 
