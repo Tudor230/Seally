@@ -19,10 +19,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import java.time.Duration
 import java.time.LocalDate
-import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 data class ExerciseEntry(
     val name: String,
@@ -84,6 +87,18 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
     ) { pEntities, peEntities, catalog ->
         buildPresetUiModels(pEntities, peEntities, catalog)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            rolloverPastPlansToExerciseLogs()
+        }
+        viewModelScope.launch {
+            while (true) {
+                delay(millisUntilNextMidnight())
+                rolloverPastPlansToExerciseLogs()
+            }
+        }
+    }
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
@@ -175,10 +190,10 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
             val input = exercises
                 .mapNotNull { exercise ->
                     val quantity = exercise.validQuantityOrNull() ?: return@mapNotNull null
-                    if (exercise.name.isBlank() || exercise.metric.isBlank()) return@mapNotNull null
+                    if (exercise.name.isBlank()) return@mapNotNull null
                     TrainingPresetExerciseInput(
                         exerciseName = exercise.name,
-                        metric = exercise.metric,
+                        metric = exercise.metric.ifBlank { "reps" },
                         quantity = quantity,
                     )
                 }
@@ -186,12 +201,14 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                 onSaved(false)
                 return@launch
             }
-            if (presetId == null) {
-                presetRepository.addPreset(name = name, exercises = input)
-            } else {
-                presetRepository.updatePreset(presetId = presetId, name = name, exercises = input)
-            }
-            onSaved(true)
+            val didSave = runCatching {
+                if (presetId == null) {
+                    presetRepository.addPreset(name = name, exercises = input)
+                } else {
+                    presetRepository.updatePreset(presetId = presetId, name = name, exercises = input)
+                }
+            }.isSuccess
+            onSaved(didSave)
         }
     }
 
@@ -199,6 +216,39 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             presetRepository.deletePreset(presetId)
         }
+    }
+
+    private suspend fun rolloverPastPlansToExerciseLogs() {
+        val today = LocalDate.now()
+        val allPlans = calendarPlanRepository.getAll()
+        val pastDates = allPlans
+            .mapNotNull { plan -> runCatching { LocalDate.parse(plan.date) }.getOrNull() }
+            .filter { date -> date.isBefore(today) }
+            .map { date -> date.toString() }
+            .toSet()
+
+        for (date in pastDates) {
+            val existingLogs = exerciseLogRepository.getByDate(date)
+            if (existingLogs.isEmpty()) {
+                val planEntriesForDate = calendarPlanRepository.getByDate(date)
+                planEntriesForDate.forEach { plan ->
+                    exerciseLogRepository.addLog(
+                        exerciseName = plan.exerciseName,
+                        quantity = plan.quantity,
+                        metric = plan.metric,
+                        date = plan.date,
+                    )
+                }
+            }
+            calendarPlanRepository.deleteByDate(date)
+        }
+    }
+
+    private fun millisUntilNextMidnight(): Long {
+        val zone = ZoneId.systemDefault()
+        val now = ZonedDateTime.now(zone)
+        val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay(zone)
+        return Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L)
     }
 
     private fun loadExerciseCatalog(context: android.content.Context): List<ExerciseCatalogEntry> {

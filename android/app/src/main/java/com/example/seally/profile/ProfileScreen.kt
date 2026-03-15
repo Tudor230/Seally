@@ -227,6 +227,7 @@ fun ProfileScreen(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         OutlinedTextField(
                             value = ageText,
@@ -234,53 +235,50 @@ fun ProfileScreen(
                             label = { Text("Age") },
                             placeholder = { Text("years") },
                             modifier = Modifier.weight(1f),
+                            singleLine = true,
                             isError = ageError,
                             shape = fieldShape,
                             colors = friendlyOutlinedTextFieldColors(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            supportingText = {
-                                if (ageError) {
-                                    Text("10–120 years", color = MaterialTheme.colorScheme.error)
-                                }
-                            }
                         )
 
-                        Box(modifier = Modifier.weight(1f)) {
-                            ExposedDropdownMenuBox(
-                                expanded = false,
-                                onExpandedChange = {},
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = 5.dp)
+                                .height(56.dp),
+                            shape = fieldShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, outline),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                OutlinedTextField(
-                                    value = if (gender == "male") "Male" else if (gender == "female") "Female" else "",
-                                    onValueChange = {},
-                                    label = { Text("Gender") },
-                                    readOnly = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .menuAnchor(),
-                                    shape = fieldShape,
-                                    colors = friendlyOutlinedTextFieldColors(),
-                                    trailingIcon = {
-                                        Row {
-                                            IconButton(onClick = { gender = "male" }) {
-                                                Icon(
-                                                    Icons.Default.Male,
-                                                    contentDescription = "Male",
-                                                    tint = if (gender == "male") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            IconButton(onClick = { gender = "female" }) {
-                                                Icon(
-                                                    Icons.Default.Female,
-                                                    contentDescription = "Female",
-                                                    tint = if (gender == "female") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
+                                IconButton(onClick = { gender = "male" }) {
+                                    Icon(
+                                        Icons.Default.Male,
+                                        contentDescription = "Male",
+                                        tint = if (gender == "male") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(onClick = { gender = "female" }) {
+                                    Icon(
+                                        Icons.Default.Female,
+                                        contentDescription = "Female",
+                                        tint = if (gender == "female") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
+                    }
+                    if (ageError) {
+                        Text(
+                            text = "10–120 years",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
                     }
                 }
             }

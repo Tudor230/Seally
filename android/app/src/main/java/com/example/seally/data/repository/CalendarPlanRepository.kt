@@ -17,6 +17,7 @@ class CalendarPlanRepository(context: Context) {
 
     fun observeAll(): Flow<List<CalendarPlanEntryEntity>> = mDao.observeAll()
     fun observeByDate(date: String): Flow<List<CalendarPlanEntryEntity>> = mDao.observeByDate(date)
+    suspend fun getAll(): List<CalendarPlanEntryEntity> = mDao.getAll()
     suspend fun getByDate(date: String): List<CalendarPlanEntryEntity> = mDao.getByDate(date)
 
     suspend fun replaceDatePlan(date: String, entries: List<CalendarPlanInput>) {

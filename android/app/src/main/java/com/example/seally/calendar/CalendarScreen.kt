@@ -23,7 +23,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,6 +58,8 @@ fun CalendarScreen(
     
     var currentSubPage by rememberSaveable { mutableStateOf(CalendarSubPage.CALENDAR) }
     var editingPreset by remember { mutableStateOf<TrainingPresetUiModel?>(null) }
+    var exercisePickerReturnPage by rememberSaveable { mutableStateOf(CalendarSubPage.WORKOUT_PLANNER) }
+    var presetDraftName by rememberSaveable { mutableStateOf("") }
     
     val selectedDate by viewModel.selectedDate.collectAsState()
     val workoutByDate by viewModel.workoutByDate.collectAsState()
@@ -74,9 +75,7 @@ fun CalendarScreen(
     BackHandler(enabled = currentSubPage != CalendarSubPage.CALENDAR) {
         currentSubPage = when (currentSubPage) {
             CalendarSubPage.PRESET_EDITOR -> CalendarSubPage.PRESET_MANAGER
-            CalendarSubPage.EXERCISE_PICKER -> {
-                if (editingPreset != null) CalendarSubPage.PRESET_EDITOR else CalendarSubPage.WORKOUT_PLANNER
-            }
+            CalendarSubPage.EXERCISE_PICKER -> exercisePickerReturnPage
             CalendarSubPage.WORKOUT_PLANNER -> CalendarSubPage.CALENDAR
             CalendarSubPage.PRESET_MANAGER -> CalendarSubPage.CALENDAR
             else -> CalendarSubPage.CALENDAR
@@ -129,6 +128,7 @@ fun CalendarScreen(
                         onBackClick = { currentSubPage = CalendarSubPage.CALENDAR },
                         onEditPreset = { preset ->
                             editingPreset = preset
+                            presetDraftName = preset.name
                             draftExercises.clear()
                             draftExercises.addAll(preset.exercises)
                             currentSubPage = CalendarSubPage.PRESET_EDITOR
@@ -136,6 +136,7 @@ fun CalendarScreen(
                         onDeletePreset = { viewModel.deletePreset(it) },
                         onAddPreset = {
                             editingPreset = null
+                            presetDraftName = ""
                             draftExercises.clear()
                             currentSubPage = CalendarSubPage.PRESET_EDITOR
                         }
@@ -144,11 +145,14 @@ fun CalendarScreen(
                 CalendarSubPage.PRESET_EDITOR -> {
                     PresetEditorPage(
                         initialPreset = editingPreset,
+                        name = presetDraftName,
+                        onNameChange = { presetDraftName = it },
                         draftExercises = draftExercises,
                         onBackClick = { currentSubPage = CalendarSubPage.PRESET_MANAGER },
                         onSave = { name, exercises ->
                             viewModel.savePreset(editingPreset?.id, name, exercises) { didSave ->
                                 if (didSave) {
+                                    presetDraftName = ""
                                     currentSubPage = CalendarSubPage.PRESET_MANAGER
                                 } else {
                                     scope.launch {
@@ -159,6 +163,7 @@ fun CalendarScreen(
                         },
                         onPickExercise = { index ->
                             exerciseTargetIndex = index
+                            exercisePickerReturnPage = CalendarSubPage.PRESET_EDITOR
                             currentSubPage = CalendarSubPage.EXERCISE_PICKER
                         }
                     )
@@ -183,6 +188,7 @@ fun CalendarScreen(
                         },
                         onPickExercise = { index ->
                             exerciseTargetIndex = index
+                            exercisePickerReturnPage = CalendarSubPage.WORKOUT_PLANNER
                             currentSubPage = CalendarSubPage.EXERCISE_PICKER
                         }
                     )
@@ -191,7 +197,7 @@ fun CalendarScreen(
                     ExercisePickerPage(
                         catalog = viewModel.exerciseCatalog,
                         onBackClick = {
-                            currentSubPage = if (editingPreset != null) CalendarSubPage.PRESET_EDITOR else CalendarSubPage.WORKOUT_PLANNER
+                            currentSubPage = exercisePickerReturnPage
                         },
                         onPick = { catalogEntry ->
                             val index = exerciseTargetIndex
@@ -201,7 +207,7 @@ fun CalendarScreen(
                                     metric = catalogEntry.metric
                                 )
                             }
-                            currentSubPage = if (editingPreset != null) CalendarSubPage.PRESET_EDITOR else CalendarSubPage.WORKOUT_PLANNER
+                            currentSubPage = exercisePickerReturnPage
                         }
                     )
                 }
@@ -245,7 +251,10 @@ fun MainCalendarContent(
         ) {
             IconButton(
                 onClick = onBackClick,
-                modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), CircleShape).shadow(4.dp, CircleShape)
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
@@ -254,11 +263,23 @@ fun MainCalendarContent(
                 Text(text = currentMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
             }
             Row {
-                IconButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }, modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), CircleShape).shadow(2.dp, CircleShape)) {
+                IconButton(
+                    onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
+                ) {
                     Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Prev", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } }, modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), CircleShape).shadow(2.dp, CircleShape)) {
+                IconButton(
+                    onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
+                ) {
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
@@ -551,13 +572,16 @@ fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> U
 }
 
 @Composable
-fun PresetEditorPage(initialPreset: TrainingPresetUiModel?, draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<ExerciseEntry>, onBackClick: () -> Unit, onSave: (String, List<ExerciseEntry>) -> Unit, onPickExercise: (Int) -> Unit) {
-    var name by remember(initialPreset?.id) { mutableStateOf(initialPreset?.name.orEmpty()) }
-    val canSave by remember(name, draftExercises.toList()) {
-        derivedStateOf {
-            name.trim().isNotBlank() && draftExercises.any { it.isValidDraftExercise() }
-        }
-    }
+fun PresetEditorPage(
+    initialPreset: TrainingPresetUiModel?,
+    name: String,
+    onNameChange: (String) -> Unit,
+    draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<ExerciseEntry>,
+    onBackClick: () -> Unit,
+    onSave: (String, List<ExerciseEntry>) -> Unit,
+    onPickExercise: (Int) -> Unit,
+) {
+    val canSave by remember(name) { derivedStateOf { name.trim().isNotBlank() } }
     Column(modifier = Modifier.fillMaxSize()) {
         CalendarSubPageHeader(
             title = if (initialPreset == null) "New Preset" else "Edit Preset",
@@ -566,7 +590,7 @@ fun PresetEditorPage(initialPreset: TrainingPresetUiModel?, draftExercises: andr
         Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = onNameChange,
                 label = { Text("Preset Name") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -598,7 +622,12 @@ fun PresetEditorPage(initialPreset: TrainingPresetUiModel?, draftExercises: andr
             Spacer(modifier = Modifier.height(100.dp))
         }
         Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Button(onClick = { onSave(name.trim(), draftExercises.toList()) }, modifier = Modifier.fillMaxWidth().height(56.dp), enabled = canSave, shape = RoundedCornerShape(16.dp)) {
+            Button(
+                onClick = { onSave(name.trim(), draftExercises.toList()) },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = canSave,
+                shape = RoundedCornerShape(16.dp),
+            ) {
                 Text("Save Preset", fontWeight = FontWeight.Bold)
             }
         }
@@ -832,11 +861,9 @@ fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, on
             OutlinedTextField(
                 value = entry.value,
                 onValueChange = { onUpdate(entry.copy(value = sanitizeInput(it))) },
-                placeholder = { Text("0.0", style = MaterialTheme.typography.bodyMedium) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                prefix = { Text("Goal: ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 suffix = { Text(entry.metric, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
