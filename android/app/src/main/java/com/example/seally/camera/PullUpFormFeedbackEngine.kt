@@ -28,6 +28,7 @@ class PullUpFormFeedbackEngine {
     private var mPersistedCue: String? = null
     private var mPersistedCueJoints: List<String> = emptyList()
     private var mClearFrames: Int = 0
+    private var mLastSpeechTimestamp: Long = 0
 
     fun process(
         normalizedLandmarks: List<NormalizedLandmark>,
@@ -38,7 +39,7 @@ class PullUpFormFeedbackEngine {
             mRepCount = mRepCount,
             mIsCorrecting = true,
             mProblematicJoints = listOf("shoulders", "elbows", "wrists"),
-            mErrorMessage = "Step into frame",
+            mErrorMessage = maybeSpeak("Step into frame"),
         )
 
         val leftElbowAngle = calculateAngleDeg(
@@ -184,6 +185,11 @@ class PullUpFormFeedbackEngine {
             frameJoints = listOf("mouth", "wrists")
         }
 
+        if (speechCue == null) {
+            speechCue = frameCue
+        }
+        speechCue = maybeSpeak(speechCue)
+
         stabilizeCue(frameCue, frameJoints)
         val isCorrecting = mPersistedCue != null
         return FormFeedback(
@@ -218,6 +224,7 @@ class PullUpFormFeedbackEngine {
         mPersistedCue = null
         mPersistedCueJoints = emptyList()
         mClearFrames = 0
+        mLastSpeechTimestamp = 0
     }
 
     private fun isStandingNormally(
@@ -302,6 +309,17 @@ class PullUpFormFeedbackEngine {
         val dot = (abx * cbx) + (aby * cby)
         val cross = (abx * cby) - (aby * cbx)
         return abs(Math.toDegrees(atan2(cross.toDouble(), dot.toDouble()))).toFloat()
+    }
+
+    private fun maybeSpeak(message: String?): String? {
+        if (message == null) return null
+        val now = System.currentTimeMillis()
+        return if (now - mLastSpeechTimestamp >= 2000L) {
+            mLastSpeechTimestamp = now
+            message
+        } else {
+            null
+        }
     }
 
     private data class PullUpFrontLandmarks(
