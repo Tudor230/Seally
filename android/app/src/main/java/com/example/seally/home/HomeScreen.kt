@@ -56,6 +56,7 @@ import coil.request.ImageRequest
 import com.example.seally.goals.GoalUiModel
 import com.example.seally.goals.GoalsViewModel
 import com.example.seally.goals.progress
+import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.delay
 
@@ -116,20 +117,10 @@ fun HomeScreen(
         .data("file:///android_asset/seals/muscles.png")
         .build()
 
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/homepage.png")
-        .build()
-
     Box(
         modifier = modifier.fillMaxSize(),
     ) {
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.7f,
-        )
+        AppScreenBackground(assetPath = "backgrounds/homepage.png")
 
         Column(modifier = Modifier.fillMaxSize()) {
             TopHeader(

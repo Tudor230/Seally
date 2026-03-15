@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.exercises.ExercisesScreen
@@ -65,18 +66,16 @@ private val mBottomNavIconSize = 28.dp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.navigationBarColor = AndroidColor.TRANSPARENT
+        window.statusBarColor = AndroidColor.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
         }
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(
-                AndroidColor.TRANSPARENT,
-                AndroidColor.TRANSPARENT,
-            ),
-            navigationBarStyle = SystemBarStyle.auto(
-                AndroidColor.TRANSPARENT,
-                AndroidColor.TRANSPARENT,
-            ),
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
         setContent {
             SeallyTheme {

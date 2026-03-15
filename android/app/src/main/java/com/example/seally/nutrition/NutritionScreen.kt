@@ -48,6 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -199,11 +200,6 @@ fun NutritionScreen(
         NutritionPage.Water -> "backgrounds/water_trackpng.png"
         NutritionPage.Camera -> "backgrounds/form_validator.png"
     }
-    val backgroundRequest = remember(context, mBackgroundAssetPath) {
-        ImageRequest.Builder(context)
-            .data("file:///android_asset/$mBackgroundAssetPath")
-            .build()
-    }
     val musclesImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/seals/muscles.png")
         .build()
@@ -246,14 +242,7 @@ fun NutritionScreen(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // --- Background Image with Transparency ---
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.7f
-        )
+        AppScreenBackground(assetPath = mBackgroundAssetPath)
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (currentPage == NutritionPage.Kitchen) {

@@ -1,7 +1,6 @@
 package com.example.seally.profile
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -25,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.seally.ui.components.AppScreenBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,11 +38,6 @@ fun ProfileScreen(
     val profilePictureRequest = remember(context) {
         ImageRequest.Builder(context)
             .data("file:///android_asset/icons/profilePicture.png")
-            .build()
-    }
-    val backgroundRequest = remember(context) {
-        ImageRequest.Builder(context)
-            .data("file:///android_asset/backgrounds/form_validator.png")
             .build()
     }
 
@@ -133,13 +127,7 @@ fun ProfileScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            AsyncImage(
-                model = backgroundRequest,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alpha = 0.72f,
-            )
+            AppScreenBackground(assetPath = "backgrounds/form_validator.png")
 
             Column(
                 modifier = Modifier

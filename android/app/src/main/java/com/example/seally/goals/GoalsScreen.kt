@@ -41,8 +41,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -63,9 +61,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -176,22 +173,10 @@ fun GoalsScreen(
     val mTrackedMetrics = mGoals.map { it.mMetric }.toSet()
     val mAvailableMetrics = GoalMetric.entries.filterNot { it in mTrackedMetrics }
 
-    val context = LocalContext.current
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/goals.png")
-        .build()
-
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // --- Background Image with Transparency ---
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.7f
-        )
+        AppScreenBackground(assetPath = "backgrounds/goals.png")
 
         Column(
             modifier = Modifier.fillMaxSize()

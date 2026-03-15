@@ -30,6 +30,7 @@ import com.example.seally.calendar.WorkoutPlanViewModel
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.camera.ExerciseType
+import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import java.time.LocalDate
 
@@ -110,21 +111,10 @@ fun ExercisesScreen(
         .data("file:///android_asset/seals/muscles.png")
         .build()
 
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/gym.png")
-        .build()
-
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // --- Background Image with Transparency ---
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.7f
-        )
+        AppScreenBackground(assetPath = "backgrounds/gym.png")
 
         Column(
             modifier = Modifier.fillMaxSize()
