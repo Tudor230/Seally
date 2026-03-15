@@ -65,6 +65,11 @@ fun SettingsScreen(
     val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
     val primaryColor = MaterialTheme.colorScheme.primary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val ageValue = ageText.toIntOrNull()
+    val waterTargetValue = waterTargetMlText.toIntOrNull()
+    val ageError = ageText.isNotBlank() && (ageValue == null || ageValue !in 10..120)
+    val waterTargetError = waterTargetMlText.isNotBlank() && (waterTargetValue == null || waterTargetValue !in 250..10000)
+    val canApplySettings = !ageError && !waterTargetError
 
     if (showResetDialog) {
         AlertDialog(
@@ -143,6 +148,12 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = ageError,
+                    supportingText = {
+                        if (ageError) {
+                            Text("Age must be between 10 and 120.")
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = primaryColor,
                         unfocusedBorderColor = outline,
@@ -196,6 +207,12 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = waterTargetError,
+                    supportingText = {
+                        if (waterTargetError) {
+                            Text("Water target must be between 250 and 10000 ml.")
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = primaryColor,
                         unfocusedBorderColor = outline,
@@ -217,14 +234,15 @@ fun SettingsScreen(
                             p.copy(
                                 activityType = activityType,
                                 workoutDaysPerWeek = workoutDays,
-                                age = ageText.toIntOrNull(),
+                                age = ageValue,
                                 gender = gender,
-                                waterTargetMl = waterTargetMlText.toIntOrNull() ?: p.waterTargetMl
+                                waterTargetMl = waterTargetValue ?: p.waterTargetMl
                             )
                         )
                     }
                     onBackClick()
                 },
+                enabled = canApplySettings,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
