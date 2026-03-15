@@ -1239,6 +1239,46 @@ class GoalsViewModel(
         }
     }
 
+    fun createOnboardingGoals(
+        workoutDaysPerWeek: Int,
+        waterTargetMl: Int,
+        caloriesTarget: Int,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val today = LocalDate.now().toString()
+
+            mTargetRepository.upsertTarget(
+                goalName = GoalMetric.EXERCISE_DAYS.name,
+                targetValue = workoutDaysPerWeek.toDouble().coerceIn(1.0, EXERCISE_GOAL_MAX_DAYS.toDouble()),
+            )
+            mDailyGoalProgressRepository.setProgress(
+                goalName = GoalMetric.EXERCISE_DAYS.name,
+                date = today,
+                progressValue = 0.0,
+            )
+
+            mTargetRepository.upsertTarget(
+                goalName = GoalMetric.WATER.name,
+                targetValue = waterTargetMl.toDouble(),
+            )
+            mDailyGoalProgressRepository.setProgress(
+                goalName = GoalMetric.WATER.name,
+                date = today,
+                progressValue = 0.0,
+            )
+
+            mTargetRepository.upsertTarget(
+                goalName = GoalMetric.CALORIES.name,
+                targetValue = caloriesTarget.toDouble(),
+            )
+            mDailyGoalProgressRepository.setProgress(
+                goalName = GoalMetric.CALORIES.name,
+                date = today,
+                progressValue = 0.0,
+            )
+        }
+    }
+
     private suspend fun syncDerivedGoalProgressForDate(
         date: String,
         targets: List<com.example.seally.data.local.entity.TargetEntity>,

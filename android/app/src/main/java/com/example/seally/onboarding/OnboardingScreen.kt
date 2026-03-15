@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.goals.GoalsViewModel
 import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.UserProfile
 import com.example.seally.ui.components.AppScreenBackground
@@ -68,6 +69,7 @@ fun OnboardingScreen(
 ) {
     val mContext = LocalContext.current
     val mViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(mContext))
+    val mGoalsViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val mProfileState by mViewModel.profile.collectAsState()
 
     var mStep by rememberSaveable { mutableStateOf(OnboardingStep.WELCOME) }
@@ -99,10 +101,14 @@ fun OnboardingScreen(
     val mDesiredWeightValue = mDesiredWeightKg.toFloatOrNull()
     val mWaterTargetValue = mWaterTargetMl.toIntOrNull()
 
+    val mDesiredWeightError = mDesiredWeightKg.isNotBlank() && 
+        (mDesiredWeightValue == null || mDesiredWeightValue !in 20f..400f)
+
     val mCanMoveFromProfile = mName.isNotBlank() &&
-            mWeightValue != null && mWeightValue > 0 &&
+            mWeightValue != null && mWeightValue in 20f..400f &&
             mHeightValue != null && mHeightValue > 0 &&
-            mDesiredWeightValue != null && mDesiredWeightValue > 0
+            mDesiredWeightValue != null && mDesiredWeightValue in 20f..400f &&
+            !mDesiredWeightError
 
     val mProgress = when (mStep) {
         OnboardingStep.WELCOME -> 0.1f
@@ -174,7 +180,8 @@ fun OnboardingScreen(
                             mWeightKg, { mWeightKg = it.filterDecimal(6) },
                             mHeightCm, { mHeightCm = it.filterNumeric(3) },
                             mDesiredWeightKg, { mDesiredWeightKg = it.filterDecimal(6) },
-                            mCanMoveFromProfile
+                            mCanMoveFromProfile,
+                            mDesiredWeightError
                         ) { mStep = OnboardingStep.ACTIVITY }
 
                         OnboardingStep.ACTIVITY -> ActivityStep(
@@ -191,6 +198,15 @@ fun OnboardingScreen(
                         OnboardingStep.SUMMARY -> SummaryStep(
                             mName, mWeightKg, mDesiredWeightKg, mHeightCm, mActivityType, mWorkoutDays, mJourneyGoal, mWaterTargetMl,
                             onFinish = {
+                                val weightVal = mWeightValue ?: 0f
+                                val activityLevel = mActivityLevels.find { it.title == mActivityType }
+                                val maintenance = (weightVal * (activityLevel?.multiplier ?: 30f)).toInt()
+                                val caloriesTarget = when (mJourneyGoal) {
+                                    "Lose weight" -> maintenance - 500
+                                    "Gain weight" -> maintenance + 300
+                                    else -> maintenance
+                                }
+
                                 mViewModel.save(
                                     UserProfile(
                                         name = mName.trim(),
@@ -204,6 +220,13 @@ fun OnboardingScreen(
                                         onboardingCompleted = true,
                                     ),
                                 )
+
+                                mGoalsViewModel.createOnboardingGoals(
+                                    workoutDaysPerWeek = mWorkoutDays,
+                                    waterTargetMl = mWaterTargetValue ?: 2500,
+                                    caloriesTarget = caloriesTarget,
+                                )
+
                                 onCompleted()
                             }
                         )
@@ -260,6 +283,7 @@ private fun ProfileStep(
     height: String, onHeightChange: (String) -> Unit,
     goalWeight: String, onGoalWeightChange: (String) -> Unit,
     canMove: Boolean,
+    goalWeightError: Boolean = false,
     onNext: () -> Unit
 ) {
     OnboardingCard(title = "Tell us about yourself") {
@@ -267,23 +291,24 @@ private fun ProfileStep(
             OnboardingTextField(value = name, onValueChange = onNameChange, label = "Full Name")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OnboardingTextField(
-                    value = weight, onValueChange = onWeightChange, 
-                    label = "Weight (kg)", modifier = Modifier.weight(1f), 
+                    value = weight, onValueChange = onWeightChange,
+                    label = "Weight (kg)", modifier = Modifier.weight(1f),
                     keyboardType = KeyboardType.Decimal
                 )
                 OnboardingTextField(
-                    value = height, onValueChange = onHeightChange, 
-                    label = "Height (cm)", modifier = Modifier.weight(1f), 
+                    value = height, onValueChange = onHeightChange,
+                    label = "Height (cm)", modifier = Modifier.weight(1f),
                     keyboardType = KeyboardType.Number
                 )
             }
             OnboardingTextField(
-                value = goalWeight, onValueChange = onGoalWeightChange, 
-                label = "Goal Weight (kg)", keyboardType = KeyboardType.Decimal
+                value = goalWeight, onValueChange = onGoalWeightChange,
+                label = "Goal Weight (kg)", keyboardType = KeyboardType.Decimal,
+                isError = goalWeightError
             )
         }
     }
-    
+
     OnboardingButton(text = "CONTINUE", enabled = canMove, onClick = onNext)
 }
 
@@ -482,24 +507,31 @@ private fun OnboardingTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    isError: Boolean = false
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = Color.White.copy(alpha = 0.6f)) },
+        label = { Text(label, color = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.6f)) },
         singleLine = true,
         modifier = modifier.fillMaxWidth(),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(12.dp),
+        isError = isError,
+        supportingText = if (isError) { { Text("20–400 kg", color = MaterialTheme.colorScheme.error) } } else null,
         colors = TextFieldDefaults.colors(
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.White,
             focusedContainerColor = Color.White.copy(alpha = 0.2f),
             unfocusedContainerColor = Color.White.copy(alpha = 0.15f),
-            focusedIndicatorColor = Color(0xFF00E5FF),
-            unfocusedIndicatorColor = Color.White.copy(alpha = 0.3f),
-            cursorColor = Color(0xFF00E5FF)
+            focusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color(0xFF00E5FF),
+            unfocusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.3f),
+            cursorColor = Color(0xFF00E5FF),
+            errorIndicatorColor = MaterialTheme.colorScheme.error,
+            errorTextColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = Color.White.copy(alpha = 0.15f),
+            errorSupportingTextColor = MaterialTheme.colorScheme.error
         )
     )
 }
