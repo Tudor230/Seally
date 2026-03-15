@@ -22,13 +22,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,12 +63,23 @@ import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.data.repository.TargetRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
+import com.example.seally.xp.XpRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.math.roundToInt
+
+private val Application.nutritionDataStore by preferencesDataStore(name = "nutrition_state")
+private const val DEFAULT_CALORIE_TARGET = 2200
+private const val DEFAULT_WATER_TARGET_ML = 2500
+private const val DEFAULT_PROTEIN_TARGET = 140
+private const val DEFAULT_CARBS_TARGET = 220
+private const val DEFAULT_FAT_TARGET = 70
+private const val DEFAULT_SUGAR_TARGET = 50
+private const val DEFAULT_FIBER_TARGET = 30
 
 enum class NutritionPage {
     Kitchen,
@@ -103,12 +120,33 @@ data class FoodEntry(
     val fats: Int,
     val sugars: Int,
     val fibers: Int,
+    val ratingScore: Int,
+    val ratingCategory: MealRatingCategory,
     val isHealthy: Boolean,
+)
+
+enum class MealRatingCategory {
+    Good,
+    Medium,
+    Bad,
+}
+
+private data class MealRating(
+    val rating: Int,
+    val category: MealRatingCategory,
+)
+
+private data class DailyXpMacro(
+    val target: Int,
+    val eaten: Int,
+    val weight: Float,
 )
 
 class NutritionViewModel(application: Application) : AndroidViewModel(application) {
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
+    private val mXpRepository = XpRepository(application)
+    private val mFinalizeDateKey = stringPreferencesKey("daily_xp_finalized_date")
     private val mTargetRepository = TargetRepository(application)
     private val mDailyGoalProgressRepository = DailyGoalProgressRepository(application)
     private val mCurrentDate: String = LocalDate.now().toString()
@@ -129,6 +167,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     private var mSealCelebrationJob: Job? = null
 
     init {
+        finalizePreviousDayXpIfNeeded()
         observePersistedNutrition()
     }
 
@@ -206,6 +245,53 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             NutritionPage.Kitchen -> NutritionPage.Kitchen
             NutritionPage.Food, NutritionPage.Water -> NutritionPage.Kitchen
             NutritionPage.Camera -> NutritionPage.Food
+        }
+    }
+
+    private fun finalizePreviousDayXpIfNeeded() {
+        viewModelScope.launch {
+            val dataStore = getApplication<Application>().nutritionDataStore
+            val prefs = dataStore.data.first()
+            val finalizedDate = prefs[mFinalizeDateKey]
+            val previousDate = LocalDate.parse(mCurrentDate).minusDays(1).toString()
+            if (finalizedDate == previousDate) return@launch
+
+            val previousEntries = mNutritionFoodEntryRepository.getByDate(previousDate)
+            val previousDailyXp = computeDailyXp(
+                protein = DailyXpMacro(
+                    target = DEFAULT_PROTEIN_TARGET,
+                    eaten = previousEntries.sumOf { it.protein },
+                    weight = 0.25f,
+                ),
+                carbs = DailyXpMacro(
+                    target = DEFAULT_CARBS_TARGET,
+                    eaten = previousEntries.sumOf { it.carbs },
+                    weight = 0.15f,
+                ),
+                fat = DailyXpMacro(
+                    target = DEFAULT_FAT_TARGET,
+                    eaten = previousEntries.sumOf { it.fats },
+                    weight = 0.15f,
+                ),
+                fiber = DailyXpMacro(
+                    target = DEFAULT_FIBER_TARGET,
+                    eaten = previousEntries.sumOf { it.fibers },
+                    weight = 0.20f,
+                ),
+                sugar = DailyXpMacro(
+                    target = DEFAULT_SUGAR_TARGET,
+                    eaten = previousEntries.sumOf { it.sugars },
+                    weight = 0.15f,
+                ),
+                calories = DailyXpMacro(
+                    target = DEFAULT_CALORIE_TARGET,
+                    eaten = previousEntries.sumOf { it.calories },
+                    weight = 0.10f,
+                ),
+            )
+
+            mXpRepository.addXp(previousDailyXp)
+            dataStore.edit { it[mFinalizeDateKey] = previousDate }
         }
     }
 
@@ -289,6 +375,14 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
 
 private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
     val parsedMeal = runCatching { MealType.valueOf(meal) }.getOrDefault(MealType.Breakfast)
+    val rating = calculateMealRating(
+        calories = calories,
+        protein = protein,
+        carbs = carbs,
+        fats = fats,
+        sugars = sugars,
+        fibers = fibers,
+    )
     return FoodEntry(
         id = id,
         name = name,
@@ -299,7 +393,9 @@ private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
         fats = fats,
         sugars = sugars,
         fibers = fibers,
-        isHealthy = isHealthy,
+        ratingScore = rating.rating,
+        ratingCategory = rating.category,
+        isHealthy = rating.category == MealRatingCategory.Good,
     )
 }
 
@@ -311,13 +407,13 @@ fun NutritionScreen(
     onSettingsClick: () -> Unit = {},
     mViewModel: NutritionViewModel = viewModel(),
 ) {
-    val calorieTarget = 2200
-    val waterTargetMl = 2500
-    val proteinTarget = 140
-    val carbsTarget = 220
-    val fatTarget = 70
-    val sugarTarget = 50
-    val fiberTarget = 30
+    val calorieTarget = DEFAULT_CALORIE_TARGET
+    val waterTargetMl = DEFAULT_WATER_TARGET_ML
+    val proteinTarget = DEFAULT_PROTEIN_TARGET
+    val carbsTarget = DEFAULT_CARBS_TARGET
+    val fatTarget = DEFAULT_FAT_TARGET
+    val sugarTarget = DEFAULT_SUGAR_TARGET
+    val fiberTarget = DEFAULT_FIBER_TARGET
 
     val currentPage = mViewModel.mCurrentPage
     val waterConsumedMl = mViewModel.mWaterConsumedMl
@@ -446,6 +542,7 @@ fun NutritionScreen(
                     .padding(bottom = 20.dp)
             )
         }
+
     }
 }
 
@@ -931,6 +1028,32 @@ private fun MealCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val mIcon = when (food.ratingCategory) {
+                                    MealRatingCategory.Good -> Icons.Default.CheckCircle
+                                    MealRatingCategory.Medium -> Icons.Default.Info
+                                    MealRatingCategory.Bad -> Icons.Default.Cancel
+                                }
+                                val mIconTint = when (food.ratingCategory) {
+                                    MealRatingCategory.Good -> Color(0xFF2E7D32)
+                                    MealRatingCategory.Medium -> Color(0xFF607D8B)
+                                    MealRatingCategory.Bad -> MaterialTheme.colorScheme.error
+                                }
+                                Icon(
+                                    imageVector = mIcon,
+                                    contentDescription = "Meal rating ${food.ratingCategory}",
+                                    tint = mIconTint,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${food.ratingScore}/10 ${food.ratingCategory.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = mIconTint,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -1345,6 +1468,14 @@ private fun AddFoodSheet(
                     val fats = fatsText.toIntOrNull() ?: 0
                     val sugars = sugarsText.toIntOrNull() ?: 0
                     val fibers = fibersText.toIntOrNull() ?: 0
+                    val rating = calculateMealRating(
+                        calories = calories,
+                        protein = protein,
+                        carbs = carbs,
+                        fats = fats,
+                        sugars = sugars,
+                        fibers = fibers,
+                    )
                     val food = FoodEntry(
                         name = name.ifBlank { "Unnamed food" },
                         meal = selectedMeal,
@@ -1354,7 +1485,9 @@ private fun AddFoodSheet(
                         fats = fats,
                         sugars = sugars,
                         fibers = fibers,
-                        isHealthy = calories in 1..500,
+                        ratingScore = rating.rating,
+                        ratingCategory = rating.category,
+                        isHealthy = rating.category == MealRatingCategory.Good,
                     )
                     onAddFood(food)
                 },
@@ -1575,6 +1708,14 @@ private fun AddScannedFoodSheet(
             Button(
                 enabled = selectedQuantity.isValid,
                 onClick = {
+                    val rating = calculateMealRating(
+                        calories = suggestion.caloriesPer100g,
+                        protein = suggestion.proteinPer100g,
+                        carbs = suggestion.carbsPer100g,
+                        fats = suggestion.fatsPer100g,
+                        sugars = suggestion.sugarsPer100g,
+                        fibers = suggestion.fibersPer100g,
+                    )
                     val food = FoodEntry(
                         name = name.ifBlank { "Scanned food" },
                         meal = selectedMeal,
@@ -1584,7 +1725,9 @@ private fun AddScannedFoodSheet(
                         fats = scaledFats,
                         sugars = scaledSugars,
                         fibers = scaledFibers,
-                        isHealthy = scaledCalories in 1..500,
+                        ratingScore = rating.rating,
+                        ratingCategory = rating.category,
+                        isHealthy = rating.category == MealRatingCategory.Good,
                     )
                     onAddFood(food)
                 },
@@ -1652,6 +1795,110 @@ private fun NutritionValueLabel(label: String, value: String, unit: String) {
         Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(text = "$label ($unit)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+private fun calculateMealRating(
+    calories: Int,
+    protein: Int,
+    carbs: Int,
+    fats: Int,
+    sugars: Int,
+    fibers: Int,
+): MealRating {
+    fun pointsByStep(
+        value: Int,
+        lowMax: Float,
+        step: Float,
+        maxPoints: Int,
+    ): Int {
+        val safeValue = value.toFloat().coerceAtLeast(0f)
+        if (safeValue <= lowMax) return 0
+        val bucket = ((safeValue - lowMax) / step).toInt() + 1
+        return bucket.coerceIn(1, maxPoints)
+    }
+
+    val caloriesPoints = pointsByStep(value = calories, lowMax = 80f, step = 80f, maxPoints = 10)
+    val sugarPoints = pointsByStep(value = sugars, lowMax = 4f, step = 4f, maxPoints = 10)
+    val fatPoints = pointsByStep(value = fats, lowMax = 3f, step = 3f, maxPoints = 10)
+    val carbPoints = pointsByStep(value = carbs, lowMax = 10f, step = 10f, maxPoints = 10)
+
+    val proteinPoints = when {
+        protein <= 2 -> 0
+        protein <= 4 -> 1
+        protein <= 6 -> 2
+        protein <= 8 -> 3
+        protein <= 10 -> 4
+        else -> 5
+    }
+    val fiberPoints = when {
+        fibers <= 0 -> 0
+        fibers <= 1 -> 1
+        fibers <= 2 -> 2
+        fibers <= 3 -> 3
+        fibers <= 4 -> 4
+        else -> 5
+    }
+
+    val negativeScore = caloriesPoints + sugarPoints + fatPoints + carbPoints
+    val positiveScore = proteinPoints + fiberPoints
+    val score = negativeScore - positiveScore
+
+    val rating = when {
+        score <= 0 -> 10
+        score <= 3 -> 9
+        score <= 6 -> 8
+        score <= 10 -> 7
+        score <= 15 -> 6
+        score <= 20 -> 5
+        score <= 25 -> 4
+        score <= 30 -> 3
+        score <= 35 -> 2
+        else -> 1
+    }
+
+    val category = when {
+        rating > 7 -> MealRatingCategory.Good
+        rating >= 4 -> MealRatingCategory.Medium
+        else -> MealRatingCategory.Bad
+    }
+
+    return MealRating(
+        rating = rating,
+        category = category,
+    )
+}
+
+private fun computeDailyXp(
+    protein: DailyXpMacro,
+    carbs: DailyXpMacro,
+    fat: DailyXpMacro,
+    fiber: DailyXpMacro,
+    sugar: DailyXpMacro,
+    calories: DailyXpMacro,
+    maxDailyXp: Int = 40,
+    closeRangeThreshold: Float = 0.08f,
+    curveSharpness: Float = 2f,
+    minDailyXp: Int = -40,
+): Int {
+    val macros = listOf(protein, carbs, fat, fiber, sugar, calories)
+
+    fun relativeError(target: Int, eaten: Int): Float {
+        if (target <= 0) return if (eaten <= 0) 0f else 1f
+        return kotlin.math.abs(eaten - target).toFloat() / target.toFloat()
+    }
+
+    val weightedDistance = macros.sumOf { macro ->
+        val err = relativeError(target = macro.target, eaten = macro.eaten)
+        (err * macro.weight).toDouble()
+    }.toFloat()
+
+    if (weightedDistance <= closeRangeThreshold) {
+        return maxDailyXp
+    }
+
+    val normalized = (2f * kotlin.math.exp(-curveSharpness * weightedDistance) - 1f)
+    val rawXp = normalized * maxDailyXp
+    return rawXp.roundToInt().coerceIn(minDailyXp, maxDailyXp)
 }
 
 private fun calculateScannedQuantity(
