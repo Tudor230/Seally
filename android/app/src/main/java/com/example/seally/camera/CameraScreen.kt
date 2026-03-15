@@ -499,6 +499,13 @@ private fun FeedbackContent(
             }
 
             Column(horizontalAlignment = Alignment.End) {
+                if (exerciseType == ExerciseType.PLANK) {
+                    Text(
+                        text = "SAVED ${formatDuration(feedback.mMaxHoldDurationMs)}",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
                 Text(
                     text = counterLabel,
                     color = Color.White.copy(alpha = 0.7f),

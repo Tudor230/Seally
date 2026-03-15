@@ -7,6 +7,7 @@ data class FormFeedback(
     val mRepCount: Int = 0,
     val mCurrentPhase: MovementPhase = MovementPhase.STANDING,
     val mHoldDurationMs: Long = 0L,
+    val mMaxHoldDurationMs: Long = 0L,
     val mDebugKneeAngleDeg: Float? = null,
     val mDebugMinKneeAngleDeg: Float? = null,
     val mIsCorrecting: Boolean = false,

@@ -7,6 +7,7 @@ import kotlin.math.atan2
 
 class PlankFormFeedbackEngine {
     private var mAccumulatedGoodFormMs: Long = 0L
+    private var mMaxGoodFormMs: Long = 0L
     private var mLastGoodFormTimestampMs: Long? = null
     private var mLastSpeechTimestamp: Long = 0L
 
@@ -86,6 +87,7 @@ class PlankFormFeedbackEngine {
             mStatus = if (isGoodForm) ExerciseStatus.ACTIVE else ExerciseStatus.ERROR,
             mCurrentPhase = MovementPhase.STANDING,
             mHoldDurationMs = mAccumulatedGoodFormMs,
+            mMaxHoldDurationMs = mMaxGoodFormMs,
             mIsCorrecting = !isGoodForm,
             mProblematicJoints = joints,
             mErrorMessage = speechCue ?: cue,
@@ -94,6 +96,7 @@ class PlankFormFeedbackEngine {
 
     fun reset() {
         mAccumulatedGoodFormMs = 0L
+        mMaxGoodFormMs = 0L
         mLastGoodFormTimestampMs = null
         mLastSpeechTimestamp = 0L
     }
@@ -106,6 +109,7 @@ class PlankFormFeedbackEngine {
             mStatus = ExerciseStatus.ERROR,
             mCurrentPhase = MovementPhase.STANDING,
             mHoldDurationMs = mAccumulatedGoodFormMs,
+            mMaxHoldDurationMs = mMaxGoodFormMs,
             mIsCorrecting = true,
             mProblematicJoints = listOf("shoulder", "hip", "ankle"),
             mErrorMessage = stepIntoFrameCue,
@@ -114,6 +118,7 @@ class PlankFormFeedbackEngine {
 
     private fun updateTimer(isGoodForm: Boolean, frameTimestampMs: Long) {
         if (!isGoodForm) {
+            mMaxGoodFormMs = maxOf(mMaxGoodFormMs, mAccumulatedGoodFormMs)
             mLastGoodFormTimestampMs = null
             mAccumulatedGoodFormMs = 0L
             return
@@ -123,6 +128,7 @@ class PlankFormFeedbackEngine {
         if (lastGoodTimestamp != null) {
             mAccumulatedGoodFormMs += (frameTimestampMs - lastGoodTimestamp).coerceAtLeast(0L)
         }
+        mMaxGoodFormMs = maxOf(mMaxGoodFormMs, mAccumulatedGoodFormMs)
         mLastGoodFormTimestampMs = frameTimestampMs
     }
 
