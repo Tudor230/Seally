@@ -581,7 +581,13 @@ fun PresetEditorPage(
     onSave: (String, List<ExerciseEntry>) -> Unit,
     onPickExercise: (Int) -> Unit,
 ) {
-    val canSave by remember(name) { derivedStateOf { name.trim().isNotBlank() } }
+    val hasValidExercises by remember(draftExercises.toList()) {
+        derivedStateOf { draftExercises.any { it.isValidDraftExercise() } }
+    }
+    val nameError = name.isBlank()
+    val canSave by remember(name, hasValidExercises) {
+        derivedStateOf { name.trim().isNotBlank() && hasValidExercises }
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         CalendarSubPageHeader(
             title = if (initialPreset == null) "New Preset" else "Edit Preset",
@@ -595,6 +601,12 @@ fun PresetEditorPage(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 singleLine = true,
+                isError = nameError,
+                supportingText = {
+                    if (nameError) {
+                        Text("Preset name is required.")
+                    }
+                },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline
@@ -611,6 +623,13 @@ fun PresetEditorPage(
                 draftExercises.forEachIndexed { index, entry ->
                     ExerciseEditItem(entry = entry, onUpdate = { draftExercises[index] = it }, onRemove = { draftExercises.removeAt(index) }, onPickExercise = { onPickExercise(index) })
                     Spacer(modifier = Modifier.height(12.dp))
+                }
+                if (!hasValidExercises) {
+                    Text(
+                        text = "Add at least one complete exercise (name + value > 0).",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -824,6 +843,8 @@ fun WorkoutPlannerPage(
 
 @Composable
 fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, onRemove: () -> Unit, onPickExercise: () -> Unit) {
+    val nameError = entry.name.isBlank()
+    val valueError = entry.value.isNotBlank() && (entry.value.toDoubleOrNull()?.let { it > 0.0 } != true)
     Surface(
         modifier = Modifier.fillMaxWidth(), 
         shape = RoundedCornerShape(20.dp), 
@@ -857,6 +878,13 @@ fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, on
                     Icon(Icons.Default.Close, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) 
                 }
             }
+            if (nameError) {
+                Text(
+                    text = "Select an exercise name.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             Spacer(modifier = Modifier.height(10.dp))
             OutlinedTextField(
                 value = entry.value,
@@ -866,6 +894,12 @@ fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, on
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 suffix = { Text(entry.metric, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                 singleLine = true,
+                isError = valueError,
+                supportingText = {
+                    if (valueError) {
+                        Text("Enter a value greater than 0.")
+                    }
+                },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
