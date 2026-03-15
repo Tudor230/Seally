@@ -49,6 +49,8 @@ fun ExercisesScreen(
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
     var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+    var mPendingExerciseGoal by remember { mutableStateOf<ExerciseType?>(null) }
+    var mGoalInput by remember { mutableStateOf("10") }
     val mIsOnSubpage = mSelectedExerciseForChecker != null || showDumbbellPage || showCalendar
 
     LaunchedEffect(mIsOnSubpage) {
@@ -61,7 +63,10 @@ fun ExercisesScreen(
                 mCameraViewModel.persistExerciseSessionOnExit()
                 mSelectedExerciseForChecker = null
             }
-            showDumbbellPage -> showDumbbellPage = false
+            showDumbbellPage -> {
+                mPendingExerciseGoal = null
+                showDumbbellPage = false
+            }
             showCalendar -> showCalendar = false
         }
     }
@@ -72,6 +77,9 @@ fun ExercisesScreen(
                 modifier = Modifier.fillMaxSize(),
                 mViewModel = mCameraViewModel,
                 mShowExerciseGuideOnEntry = true,
+                mOnSessionFinished = {
+                    mSelectedExerciseForChecker = null
+                },
             )
             IconButton(
                 onClick = {
@@ -96,12 +104,61 @@ fun ExercisesScreen(
     if (showDumbbellPage) {
         DumbbellWorkoutsScreen(
             modifier = modifier,
-            onBackClick = { showDumbbellPage = false },
+            onBackClick = {
+                mPendingExerciseGoal = null
+                showDumbbellPage = false
+            },
             onExerciseSelected = { mExercise ->
-                mCameraViewModel.setSelectedExercise(mExercise)
-                mSelectedExerciseForChecker = mExercise
+                mPendingExerciseGoal = mExercise
+                mGoalInput = "10"
             },
         )
+
+        mPendingExerciseGoal?.let { pendingExercise ->
+            AlertDialog(
+                onDismissRequest = { mPendingExerciseGoal = null },
+                title = { Text("Set exercise goal") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "How many ${pendingExercise.toGoalUnitLabel()} do you expect to complete?",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedTextField(
+                            value = mGoalInput,
+                            onValueChange = { input ->
+                                mGoalInput = input.filter(Char::isDigit).take(4)
+                            },
+                            label = { Text("Expected ${pendingExercise.toGoalUnitLabel()}") },
+                            singleLine = true,
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val mGoal = mGoalInput.toIntOrNull()
+                            if (mGoal == null || mGoal <= 0) return@Button
+                            mCameraViewModel.startExerciseSession(
+                                mExerciseType = pendingExercise,
+                                mExpectedGoal = mGoal,
+                            )
+                            mSelectedExerciseForChecker = pendingExercise
+                            mPendingExerciseGoal = null
+                        },
+                        enabled = mGoalInput.toIntOrNull()?.let { it > 0 } == true,
+                    ) {
+                        Text("Start")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mPendingExerciseGoal = null }) {
+                        Text("Cancel")
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+            )
+        }
         return
     }
 
@@ -247,4 +304,11 @@ private fun CalendarPlanEntryEntity.toWorkoutSummary(): String {
     val mMetricLabel = metric.ifBlank { "units" }
     val mValueLabel = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else String.format("%.1f", quantity)
     return "$mName ($mValueLabel $mMetricLabel)"
+}
+
+private fun ExerciseType.toGoalUnitLabel(): String {
+    return when (this) {
+        ExerciseType.PLANK -> "seconds"
+        ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> "reps"
+    }
 }
