@@ -56,8 +56,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
+import com.example.seally.onboarding.OnboardingScreen
 import com.example.seally.nutrition.NutritionScreen
 import com.example.seally.nutrition.NutritionViewModel
+import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.ProfileRoute
 import com.example.seally.ui.theme.SeallyTheme
 
@@ -81,6 +83,9 @@ class MainActivity : ComponentActivity() {
             SeallyTheme {
                 val cameraViewModel: CameraViewModel = viewModel()
                 val uiState by cameraViewModel.uiState.collectAsState()
+                val context = LocalContext.current
+                val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(context))
+                val profile by profileViewModel.profile.collectAsState()
 
                 LaunchedEffect(uiState.mFormFeedback.mProblematicJoints, uiState.mFormFeedback.mErrorMessage) {
                     val resultIntent = Intent().apply {
@@ -93,7 +98,11 @@ class MainActivity : ComponentActivity() {
                     setResult(RESULT_OK, resultIntent)
                 }
 
-                SeallyApp(mCameraViewModel = cameraViewModel)
+                if (profile.onboardingCompleted) {
+                    SeallyApp(mCameraViewModel = cameraViewModel)
+                } else {
+                    OnboardingScreen()
+                }
             }
         }
     }
