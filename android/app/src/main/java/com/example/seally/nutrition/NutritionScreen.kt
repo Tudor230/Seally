@@ -34,7 +34,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,7 +73,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-private val Application.nutritionDataStore by preferencesDataStore(name = "nutrition_state")
 private const val DEFAULT_CALORIE_TARGET = 2200
 private const val DEFAULT_WATER_TARGET_ML = 2500
 private const val DEFAULT_PROTEIN_TARGET = 140
