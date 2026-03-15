@@ -368,7 +368,6 @@ private fun GoalCard(
 ) {
     val mProgress = goal.progress()
     val mColor = goal.mMetric.mAccentColor
-    val mIsGoalCompleted = mProgress >= 1f
 
     Surface(
         modifier = Modifier
@@ -407,11 +406,6 @@ private fun GoalCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (mIsGoalCompleted) "Goal Achieved!" else "In Progress",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (mIsGoalCompleted) mColor else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -484,7 +478,7 @@ private fun GoalCard(
                 gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                 labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 axisColor = MaterialTheme.colorScheme.outlineVariant,
-                isGoalCompleted = mIsGoalCompleted,
+                isGoalCompleted = mProgress >= 1f,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp),
@@ -1161,12 +1155,7 @@ private fun GoalDirection.calculateProgress(
 ): Float {
     if (targetValue <= 0f) return 0f
 
-    return when (this) {
-        GoalDirection.AT_LEAST -> (currentValue / targetValue).coerceIn(0f, 1f)
-        GoalDirection.AT_MOST -> {
-            if (currentValue <= 0f) 1f else (targetValue / currentValue).coerceIn(0f, 1f)
-        }
-    }
+    return (currentValue / targetValue).coerceIn(0f, 1f)
 }
 
 private fun Float?.toInputValue(): String {
