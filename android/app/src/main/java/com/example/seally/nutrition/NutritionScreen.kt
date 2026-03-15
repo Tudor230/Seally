@@ -63,6 +63,8 @@ import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.data.repository.TargetRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
+import com.example.seally.xp.XpCalculators
+import com.example.seally.xp.XpProjectionRepository
 import com.example.seally.xp.XpRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -80,6 +82,13 @@ private const val DEFAULT_CARBS_TARGET = 220
 private const val DEFAULT_FAT_TARGET = 70
 private const val DEFAULT_SUGAR_TARGET = 50
 private const val DEFAULT_FIBER_TARGET = 30
+private const val GOAL_WATER = "WATER"
+private const val GOAL_CALORIES = "CALORIES"
+private const val GOAL_PROTEIN = "PROTEIN"
+private const val GOAL_CARBS = "CARBS"
+private const val GOAL_FATS = "FATS"
+private const val GOAL_SUGARS = "SUGARS"
+private const val GOAL_FIBERS = "FIBERS"
 
 enum class NutritionPage {
     Kitchen,
@@ -136,12 +145,6 @@ private data class MealRating(
     val category: MealRatingCategory,
 )
 
-private data class DailyXpMacro(
-    val target: Int,
-    val eaten: Int,
-    val weight: Float,
-)
-
 class NutritionViewModel(application: Application) : AndroidViewModel(application) {
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
@@ -149,6 +152,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     private val mFinalizeDateKey = stringPreferencesKey("daily_xp_finalized_date")
     private val mTargetRepository = TargetRepository(application)
     private val mDailyGoalProgressRepository = DailyGoalProgressRepository(application)
+    private val mXpProjectionRepository = XpProjectionRepository(application)
     private val mCurrentDate: String = LocalDate.now().toString()
     private var mPersistedFoodEntries: List<NutritionFoodEntryEntity> = emptyList()
     private var mPersistedWaterMl: Int = 0
@@ -159,7 +163,25 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     var mWaterConsumedMl by mutableIntStateOf(0)
         private set
 
+    var mCaloriesGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mWaterGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mProteinGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mCarbsGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mFatsGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mSugarsGoalTarget by mutableStateOf<Int?>(null)
+        private set
+    var mFibersGoalTarget by mutableStateOf<Int?>(null)
+        private set
+
     var mShouldShowSealCelebration by mutableStateOf(false)
+        private set
+
+    var mLastAddedFoodRatingCategory by mutableStateOf<MealRatingCategory?>(null)
         private set
 
     val mFoods = mutableStateListOf<FoodEntry>()
@@ -169,6 +191,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         finalizePreviousDayXpIfNeeded()
         observePersistedNutrition()
+        observeGoalTargets()
     }
 
     fun openFoodPage() {
@@ -185,6 +208,8 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun addManualFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
+            mLastAddedFoodRatingCategory = foodEntry.ratingCategory
+            triggerSealCelebration()
             mNutritionFoodEntryRepository.addEntry(
                 date = mCurrentDate,
                 name = foodEntry.name,
@@ -197,12 +222,13 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 fibers = foodEntry.fibers,
                 isHealthy = foodEntry.isHealthy,
             )
-            triggerSealCelebration()
         }
     }
 
     fun addScannedFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
+            mLastAddedFoodRatingCategory = foodEntry.ratingCategory
+            triggerSealCelebration()
             mNutritionFoodEntryRepository.addEntry(
                 date = mCurrentDate,
                 name = foodEntry.name,
@@ -215,7 +241,6 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 fibers = foodEntry.fibers,
                 isHealthy = foodEntry.isHealthy,
             )
-            triggerSealCelebration()
             mCurrentPage = NutritionPage.Food
         }
     }
@@ -257,40 +282,23 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             if (finalizedDate == previousDate) return@launch
 
             val previousEntries = mNutritionFoodEntryRepository.getByDate(previousDate)
-            val previousDailyXp = computeDailyXp(
-                protein = DailyXpMacro(
-                    target = DEFAULT_PROTEIN_TARGET,
-                    eaten = previousEntries.sumOf { it.protein },
-                    weight = 0.25f,
-                ),
-                carbs = DailyXpMacro(
-                    target = DEFAULT_CARBS_TARGET,
-                    eaten = previousEntries.sumOf { it.carbs },
-                    weight = 0.15f,
-                ),
-                fat = DailyXpMacro(
-                    target = DEFAULT_FAT_TARGET,
-                    eaten = previousEntries.sumOf { it.fats },
-                    weight = 0.15f,
-                ),
-                fiber = DailyXpMacro(
-                    target = DEFAULT_FIBER_TARGET,
-                    eaten = previousEntries.sumOf { it.fibers },
-                    weight = 0.20f,
-                ),
-                sugar = DailyXpMacro(
-                    target = DEFAULT_SUGAR_TARGET,
-                    eaten = previousEntries.sumOf { it.sugars },
-                    weight = 0.15f,
-                ),
-                calories = DailyXpMacro(
-                    target = DEFAULT_CALORIE_TARGET,
-                    eaten = previousEntries.sumOf { it.calories },
-                    weight = 0.10f,
-                ),
+            val previousNutritionXp = XpCalculators.nutritionDailyXp(
+                calories = previousEntries.sumOf { it.calories },
+                protein = previousEntries.sumOf { it.protein },
+                carbs = previousEntries.sumOf { it.carbs },
+                fats = previousEntries.sumOf { it.fats },
+                sugars = previousEntries.sumOf { it.sugars },
+                fibers = previousEntries.sumOf { it.fibers },
+            )
+            val previousLog = mNutritionLogRepository.getByDate(previousDate)
+            val waterTargetMl = resolveWaterTargetMl()
+            val previousWaterXp = XpCalculators.waterDailyXp(
+                consumedMl = previousLog?.waterMl ?: 0,
+                targetMl = waterTargetMl,
             )
 
-            mXpRepository.addXp(previousDailyXp)
+            mXpRepository.addXp(previousNutritionXp)
+            mXpRepository.addXp(previousWaterXp)
             dataStore.edit { it[mFinalizeDateKey] = previousDate }
         }
     }
@@ -310,6 +318,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 mWaterConsumedMl = log?.waterMl ?: 0
                 mPersistedWaterMl = mWaterConsumedMl
                 syncNutritionGoalsProgress()
+                updateTodayPendingXpProjection()
             }
         }
         viewModelScope.launch {
@@ -319,6 +328,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 mFoods.addAll(entries.map { it.toFoodEntry() })
                 syncNutritionLogFromFoodEntries()
                 syncNutritionGoalsProgress()
+                updateTodayPendingXpProjection()
             }
         }
     }
@@ -351,13 +361,13 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             val water = mPersistedWaterMl.coerceAtLeast(0).toDouble()
 
             val goalProgressByName = mapOf(
-                "WATER" to water,
-                "CALORIES" to calories,
-                "PROTEIN" to protein,
-                "CARBS" to carbs,
-                "FATS" to fats,
-                "SUGARS" to sugars,
-                "FIBERS" to fibers,
+                GOAL_WATER to water,
+                GOAL_CALORIES to calories,
+                GOAL_PROTEIN to protein,
+                GOAL_CARBS to carbs,
+                GOAL_FATS to fats,
+                GOAL_SUGARS to sugars,
+                GOAL_FIBERS to fibers,
             )
 
             goalProgressByName.forEach { (goalName, progressValue) ->
@@ -368,6 +378,42 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                         progressValue = progressValue,
                     )
                 }
+            }
+        }
+    }
+
+    private suspend fun resolveWaterTargetMl(): Int {
+        val waterGoalTarget = mTargetRepository.getByGoalName("WATER")?.targetValue?.roundToInt()
+        return (waterGoalTarget ?: DEFAULT_WATER_TARGET_ML).coerceAtLeast(1)
+    }
+
+    private suspend fun updateTodayPendingXpProjection() {
+        val projectedNutritionXp = XpCalculators.nutritionDailyXp(
+            calories = mPersistedFoodEntries.sumOf { it.calories },
+            protein = mPersistedFoodEntries.sumOf { it.protein },
+            carbs = mPersistedFoodEntries.sumOf { it.carbs },
+            fats = mPersistedFoodEntries.sumOf { it.fats },
+            sugars = mPersistedFoodEntries.sumOf { it.sugars },
+            fibers = mPersistedFoodEntries.sumOf { it.fibers },
+        )
+        val waterTargetMl = resolveWaterTargetMl()
+        val projectedWaterXp = XpCalculators.waterDailyXp(
+            consumedMl = mPersistedWaterMl,
+            targetMl = waterTargetMl,
+        )
+        mXpProjectionRepository.setTodayPendingXp(projectedNutritionXp + projectedWaterXp)
+    }
+    private fun observeGoalTargets() {
+        viewModelScope.launch {
+            mTargetRepository.observeTargets().collectLatest { targets ->
+                val mTargetsByName = targets.associateBy { it.goalName }
+                mCaloriesGoalTarget = mTargetsByName[GOAL_CALORIES]?.targetValue?.toInt()
+                mWaterGoalTarget = mTargetsByName[GOAL_WATER]?.targetValue?.toInt()
+                mProteinGoalTarget = mTargetsByName[GOAL_PROTEIN]?.targetValue?.toInt()
+                mCarbsGoalTarget = mTargetsByName[GOAL_CARBS]?.targetValue?.toInt()
+                mFatsGoalTarget = mTargetsByName[GOAL_FATS]?.targetValue?.toInt()
+                mSugarsGoalTarget = mTargetsByName[GOAL_SUGARS]?.targetValue?.toInt()
+                mFibersGoalTarget = mTargetsByName[GOAL_FIBERS]?.targetValue?.toInt()
             }
         }
     }
@@ -407,13 +453,13 @@ fun NutritionScreen(
     onSettingsClick: () -> Unit = {},
     mViewModel: NutritionViewModel = viewModel(),
 ) {
-    val calorieTarget = DEFAULT_CALORIE_TARGET
-    val waterTargetMl = DEFAULT_WATER_TARGET_ML
-    val proteinTarget = DEFAULT_PROTEIN_TARGET
-    val carbsTarget = DEFAULT_CARBS_TARGET
-    val fatTarget = DEFAULT_FAT_TARGET
-    val sugarTarget = DEFAULT_SUGAR_TARGET
-    val fiberTarget = DEFAULT_FIBER_TARGET
+    val calorieGoalTarget = mViewModel.mCaloriesGoalTarget
+    val waterGoalTarget = mViewModel.mWaterGoalTarget
+    val proteinGoalTarget = mViewModel.mProteinGoalTarget
+    val carbsGoalTarget = mViewModel.mCarbsGoalTarget
+    val fatGoalTarget = mViewModel.mFatsGoalTarget
+    val sugarGoalTarget = mViewModel.mSugarsGoalTarget
+    val fiberGoalTarget = mViewModel.mFibersGoalTarget
 
     val currentPage = mViewModel.mCurrentPage
     val waterConsumedMl = mViewModel.mWaterConsumedMl
@@ -435,9 +481,6 @@ fun NutritionScreen(
         NutritionPage.Water -> "backgrounds/water_trackpng.png"
         NutritionPage.Camera -> "backgrounds/form_validator.png"
     }
-    val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/seals/muscles.png")
-        .build()
 
     BackHandler(
         enabled = mViewModel.canNavigateBackInNutrition(),
@@ -491,26 +534,26 @@ fun NutritionScreen(
                 when (currentPage) {
                     NutritionPage.Kitchen -> KitchenMainPage(
                         caloriesConsumed = caloriesConsumed,
-                        calorieTarget = calorieTarget,
+                        calorieTarget = calorieGoalTarget,
                         waterConsumedMl = waterConsumedMl,
-                        waterTargetMl = waterTargetMl,
+                        waterTargetMl = waterGoalTarget,
                         onOpenFood = mViewModel::openFoodPage,
                         onOpenWater = mViewModel::openWaterPage,
                     )
                     NutritionPage.Food -> FoodTrackingPage(
                         foods = foods,
                         caloriesConsumed = caloriesConsumed,
-                        calorieTarget = calorieTarget,
+                        calorieTarget = calorieGoalTarget,
                         proteinConsumed = proteinConsumed,
-                        proteinTarget = proteinTarget,
+                        proteinTarget = proteinGoalTarget,
                         carbsConsumed = carbsConsumed,
-                        carbsTarget = carbsTarget,
+                        carbsTarget = carbsGoalTarget,
                         fatsConsumed = fatsConsumed,
-                        fatTarget = fatTarget,
+                        fatTarget = fatGoalTarget,
                         sugarsConsumed = sugarsConsumed,
-                        sugarTarget = sugarTarget,
+                        sugarTarget = sugarGoalTarget,
                         fibersConsumed = fibersConsumed,
-                        fiberTarget = fiberTarget,
+                        fiberTarget = fiberGoalTarget,
                         onBack = mViewModel::navigateBackInNutrition,
                         onOpenCamera = mViewModel::openCameraPage,
                         onManualAddFood = mViewModel::addManualFood,
@@ -518,7 +561,7 @@ fun NutritionScreen(
                     )
                     NutritionPage.Water -> WaterTrackingPage(
                         waterConsumedMl = waterConsumedMl,
-                        waterTargetMl = waterTargetMl,
+                        waterTargetMl = waterGoalTarget,
                         onBack = mViewModel::navigateBackInNutrition,
                         onAddWater = mViewModel::addWater,
                         onRemoveWater = mViewModel::removeWater,
@@ -531,30 +574,20 @@ fun NutritionScreen(
             }
         }
 
-        if (currentPage == NutritionPage.Kitchen) {
-            AsyncImage(
-                model = musclesImageRequest,
-                contentDescription = "Seal Character",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxHeight(0.75f)
-                    .padding(bottom = 20.dp)
-            )
-        }
-
     }
 }
 
 @Composable
 private fun KitchenMainPage(
     caloriesConsumed: Int,
-    calorieTarget: Int,
+    calorieTarget: Int?,
     waterConsumedMl: Int,
-    waterTargetMl: Int,
+    waterTargetMl: Int?,
     onOpenFood: () -> Unit,
     onOpenWater: () -> Unit,
 ) {
+    val hasCalorieGoal = calorieTarget != null && calorieTarget > 0
+    val hasWaterGoal = waterTargetMl != null && waterTargetMl > 0
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -570,9 +603,13 @@ private fun KitchenMainPage(
                 StatCard(
                     label = "Calories",
                     value = "$caloriesConsumed",
-                    target = "$calorieTarget",
+                    target = if (hasCalorieGoal) "$calorieTarget" else null,
                     unit = "kcal",
-                    progress = (caloriesConsumed.toFloat() / calorieTarget).coerceIn(0f, 1f),
+                    progress = if (hasCalorieGoal) {
+                        (caloriesConsumed.toFloat() / calorieTarget!!).coerceIn(0f, 1f)
+                    } else {
+                        null
+                    },
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                     onClick = onOpenFood
@@ -580,9 +617,13 @@ private fun KitchenMainPage(
                 StatCard(
                     label = "Water",
                     value = "$waterConsumedMl",
-                    target = "$waterTargetMl",
+                    target = if (hasWaterGoal) "$waterTargetMl" else null,
                     unit = "ml",
-                    progress = (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f),
+                    progress = if (hasWaterGoal) {
+                        (waterConsumedMl.toFloat() / waterTargetMl!!).coerceIn(0f, 1f)
+                    } else {
+                        null
+                    },
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                     onClick = onOpenWater
@@ -628,9 +669,9 @@ private fun KitchenMainPage(
 private fun StatCard(
     label: String,
     value: String,
-    target: String,
+    target: String?,
     unit: String,
-    progress: Float,
+    progress: Float?,
     color: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
@@ -668,22 +709,33 @@ private fun StatCard(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = { progress },
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(CircleShape),
-                color = color,
-                trackColor = color.copy(alpha = 0.2f),
-                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Target: $target",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                    .height(30.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (progress != null && target != null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(CircleShape),
+                            color = color,
+                            trackColor = color.copy(alpha = 0.2f),
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Target: $target",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -692,17 +744,17 @@ private fun StatCard(
 private fun FoodTrackingPage(
     foods: List<FoodEntry>,
     caloriesConsumed: Int,
-    calorieTarget: Int,
+    calorieTarget: Int?,
     proteinConsumed: Int,
-    proteinTarget: Int,
+    proteinTarget: Int?,
     carbsConsumed: Int,
-    carbsTarget: Int,
+    carbsTarget: Int?,
     fatsConsumed: Int,
-    fatTarget: Int,
+    fatTarget: Int?,
     sugarsConsumed: Int,
-    sugarTarget: Int,
+    sugarTarget: Int?,
     fibersConsumed: Int,
-    fiberTarget: Int,
+    fiberTarget: Int?,
     onBack: () -> Unit,
     onOpenCamera: () -> Unit,
     onManualAddFood: (FoodEntry) -> Unit,
@@ -816,13 +868,15 @@ private fun FoodTrackingPage(
 
 @Composable
 private fun MacroOverviewPanel(
-    calories: Int, calorieTarget: Int,
-    protein: Int, proteinTarget: Int,
-    carbs: Int, carbsTarget: Int,
-    fats: Int, fatTarget: Int,
-    sugars: Int, sugarTarget: Int,
-    fibers: Int, fiberTarget: Int
+    calories: Int, calorieTarget: Int?,
+    protein: Int, proteinTarget: Int?,
+    carbs: Int, carbsTarget: Int?,
+    fats: Int, fatTarget: Int?,
+    sugars: Int, sugarTarget: Int?,
+    fibers: Int, fiberTarget: Int?
 ) {
+    val hasCalorieTarget = calorieTarget != null && calorieTarget > 0
+    val safeCalorieTarget = calorieTarget ?: 0
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -850,28 +904,30 @@ private fun MacroOverviewPanel(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = " / $calorieTarget kcal",
+                            text = if (hasCalorieTarget) " / $calorieTarget kcal" else " kcal",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
                     }
                 }
-                
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
-                    CircularProgressIndicator(
-                        progress = { (calories.toFloat() / calorieTarget).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxSize(),
-                        strokeWidth = 8.dp,
-                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    )
-                    Text(
-                        text = "${(calories.toFloat() / calorieTarget * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+
+                if (hasCalorieTarget) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
+                        CircularProgressIndicator(
+                            progress = { (calories.toFloat() / safeCalorieTarget).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 8.dp,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        )
+                        Text(
+                            text = "${(calories.toFloat() / safeCalorieTarget * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
@@ -906,22 +962,32 @@ private fun MacroOverviewPanel(
 }
 
 @Composable
-private fun MacroMiniStat(label: String, value: Int, target: Int, color: Color) {
+private fun MacroMiniStat(label: String, value: Int, target: Int?, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(56.dp)) {
-            CircularProgressIndicator(
-                progress = { (value.toFloat() / target).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxSize(),
-                color = color,
-                strokeWidth = 6.dp,
-                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                trackColor = color.copy(alpha = 0.1f)
-            )
+        val hasTarget = target != null && target > 0
+        if (hasTarget) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(56.dp)) {
+                CircularProgressIndicator(
+                    progress = { (value.toFloat() / target!!).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxSize(),
+                    color = color,
+                    strokeWidth = 6.dp,
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    trackColor = color.copy(alpha = 0.1f)
+                )
+                Text(
+                    text = "${value}g",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        } else {
             Text(
                 text = "${value}g",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -930,18 +996,25 @@ private fun MacroMiniStat(label: String, value: Int, target: Int, color: Color) 
 }
 
 @Composable
-private fun SecondaryMacroStat(label: String, value: Int, target: Int, modifier: Modifier = Modifier) {
+private fun SecondaryMacroStat(label: String, value: Int, target: Int?, modifier: Modifier = Modifier) {
+    val hasTarget = target != null && target > 0
     Column(modifier = modifier) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = "$value / $target g", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = if (hasTarget) "$value / $target g" else "$value g",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { (value.toFloat() / target).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
+        if (hasTarget) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LinearProgressIndicator(
+                progress = { (value.toFloat() / target!!).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
     }
 }
 
@@ -1081,11 +1154,13 @@ private fun MealCard(
 @Composable
 private fun WaterTrackingPage(
     waterConsumedMl: Int,
-    waterTargetMl: Int,
+    waterTargetMl: Int?,
     onBack: () -> Unit,
     onAddWater: (Int) -> Unit,
     onRemoveWater: (Int) -> Unit,
 ) {
+    val hasWaterGoal = waterTargetMl != null && waterTargetMl > 0
+    val safeWaterTarget = waterTargetMl ?: 0
     val context = LocalContext.current
     val waterSvgRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/icons/water_glass.svg")
@@ -1210,7 +1285,7 @@ private fun WaterTrackingPage(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "$waterConsumedMl / $waterTargetMl ml",
+                    text = if (hasWaterGoal) "$waterConsumedMl / $waterTargetMl ml" else "$waterConsumedMl ml",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
@@ -1218,20 +1293,22 @@ private fun WaterTrackingPage(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Daily Goal",
+                    text = if (hasWaterGoal) "Daily Goal" else "Current Intake",
                     style = MaterialTheme.typography.labelLarge,
                     color = (if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.7f)
                 )
             }
 
-            CircularProgressIndicator(
-                progress = { (waterConsumedMl.toFloat() / waterTargetMl).coerceIn(0f, 1f) },
-                modifier = Modifier.size(280.dp),
-                color = if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                strokeWidth = 12.dp,
-                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                trackColor = (if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f)
-            )
+            if (hasWaterGoal) {
+                CircularProgressIndicator(
+                    progress = { (waterConsumedMl.toFloat() / safeWaterTarget).coerceIn(0f, 1f) },
+                    modifier = Modifier.size(280.dp),
+                    color = if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    strokeWidth = 12.dp,
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    trackColor = (if (isRemoveMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(48.dp))
@@ -1909,7 +1986,7 @@ private fun calculateMealRating(
     }
 
     val category = when {
-        rating > 7 -> MealRatingCategory.Good
+        rating >= 7 -> MealRatingCategory.Good
         rating >= 4 -> MealRatingCategory.Medium
         else -> MealRatingCategory.Bad
     }
@@ -1918,39 +1995,6 @@ private fun calculateMealRating(
         rating = rating,
         category = category,
     )
-}
-
-private fun computeDailyXp(
-    protein: DailyXpMacro,
-    carbs: DailyXpMacro,
-    fat: DailyXpMacro,
-    fiber: DailyXpMacro,
-    sugar: DailyXpMacro,
-    calories: DailyXpMacro,
-    maxDailyXp: Int = 40,
-    closeRangeThreshold: Float = 0.08f,
-    curveSharpness: Float = 2f,
-    minDailyXp: Int = -40,
-): Int {
-    val macros = listOf(protein, carbs, fat, fiber, sugar, calories)
-
-    fun relativeError(target: Int, eaten: Int): Float {
-        if (target <= 0) return if (eaten <= 0) 0f else 1f
-        return kotlin.math.abs(eaten - target).toFloat() / target.toFloat()
-    }
-
-    val weightedDistance = macros.sumOf { macro ->
-        val err = relativeError(target = macro.target, eaten = macro.eaten)
-        (err * macro.weight).toDouble()
-    }.toFloat()
-
-    if (weightedDistance <= closeRangeThreshold) {
-        return maxDailyXp
-    }
-
-    val normalized = (2f * kotlin.math.exp(-curveSharpness * weightedDistance) - 1f)
-    val rawXp = normalized * maxDailyXp
-    return rawXp.roundToInt().coerceIn(minDailyXp, maxDailyXp)
 }
 
 private fun calculateScannedQuantity(

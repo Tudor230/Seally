@@ -20,9 +20,10 @@ class ProfileRepository(
         val HEIGHT_CM = intPreferencesKey("height_cm")
         val WEIGHT_KG = floatPreferencesKey("weight_kg")
         val GOAL_WEIGHT_KG = floatPreferencesKey("goal_weight_kg")
+        val AGE = intPreferencesKey("age")
+        val GENDER = stringPreferencesKey("gender")
         val ACTIVITY_TYPE = stringPreferencesKey("activity_type")
         val WORKOUT_DAYS_PER_WEEK = intPreferencesKey("workout_days_per_week")
-        val JOURNEY_GOAL = stringPreferencesKey("journey_goal")
         val WATER_TARGET_ML = intPreferencesKey("water_target_ml")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
@@ -33,9 +34,10 @@ class ProfileRepository(
             heightCm = prefs[Keys.HEIGHT_CM],
             weightKg = prefs[Keys.WEIGHT_KG],
             goalWeightKg = prefs[Keys.GOAL_WEIGHT_KG],
+            age = prefs[Keys.AGE],
+            gender = prefs[Keys.GENDER] ?: "",
             activityType = prefs[Keys.ACTIVITY_TYPE] ?: "",
             workoutDaysPerWeek = prefs[Keys.WORKOUT_DAYS_PER_WEEK],
-            journeyGoal = prefs[Keys.JOURNEY_GOAL] ?: "",
             waterTargetMl = prefs[Keys.WATER_TARGET_ML],
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
         )
@@ -48,9 +50,10 @@ class ProfileRepository(
             if (profile.heightCm == null) prefs.remove(Keys.HEIGHT_CM) else prefs[Keys.HEIGHT_CM] = profile.heightCm
             if (profile.weightKg == null) prefs.remove(Keys.WEIGHT_KG) else prefs[Keys.WEIGHT_KG] = profile.weightKg
             if (profile.goalWeightKg == null) prefs.remove(Keys.GOAL_WEIGHT_KG) else prefs[Keys.GOAL_WEIGHT_KG] = profile.goalWeightKg
+            if (profile.age == null) prefs.remove(Keys.AGE) else prefs[Keys.AGE] = profile.age
+            if (profile.gender.isBlank()) prefs.remove(Keys.GENDER) else prefs[Keys.GENDER] = profile.gender
             if (profile.activityType.isBlank()) prefs.remove(Keys.ACTIVITY_TYPE) else prefs[Keys.ACTIVITY_TYPE] = profile.activityType
             if (profile.workoutDaysPerWeek == null) prefs.remove(Keys.WORKOUT_DAYS_PER_WEEK) else prefs[Keys.WORKOUT_DAYS_PER_WEEK] = profile.workoutDaysPerWeek
-            if (profile.journeyGoal.isBlank()) prefs.remove(Keys.JOURNEY_GOAL) else prefs[Keys.JOURNEY_GOAL] = profile.journeyGoal
             if (profile.waterTargetMl == null) prefs.remove(Keys.WATER_TARGET_ML) else prefs[Keys.WATER_TARGET_ML] = profile.waterTargetMl
             prefs[Keys.ONBOARDING_COMPLETED] = profile.onboardingCompleted
         }

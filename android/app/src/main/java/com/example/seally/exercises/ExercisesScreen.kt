@@ -28,7 +28,9 @@ import com.example.seally.calendar.CalendarScreen
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.camera.ExerciseType
+import com.example.seally.data.local.entity.CalendarPlanEntryEntity
 import com.example.seally.data.local.entity.ExerciseLogEntity
+import com.example.seally.data.repository.CalendarPlanRepository
 import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
@@ -113,8 +115,16 @@ fun ExercisesScreen(
 
     val context = LocalContext.current
     val mExerciseLogRepository = remember(context) { ExerciseLogRepository(context.applicationContext) }
+    val mCalendarPlanRepository = remember(context) { CalendarPlanRepository(context.applicationContext) }
     val mTodayDate = remember { LocalDate.now().toString() }
     val mTodayWorkout = mExerciseLogRepository.observeByDate(mTodayDate).collectAsState(initial = emptyList()).value
+    val mTodayPlannedWorkout = mCalendarPlanRepository.observeByDate(mTodayDate).collectAsState(initial = emptyList()).value
+    val mPreviewWorkoutSummary = if (mTodayWorkout.isNotEmpty()) {
+        mTodayWorkout.take(2).joinToString(" • ") { it.toWorkoutSummary() }
+    } else {
+        mTodayPlannedWorkout.take(2).joinToString(" • ") { it.toWorkoutSummary() }
+    }
+    val mHasWorkoutForToday = mTodayWorkout.isNotEmpty() || mTodayPlannedWorkout.isNotEmpty()
     val musclesImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/seals/muscles.png")
         .build()
@@ -152,7 +162,7 @@ fun ExercisesScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
 
-                    if (mTodayWorkout.isEmpty()) {
+                    if (!mHasWorkoutForToday) {
                         Text(
                             text = "You do not have anything planned for today.",
                             style = MaterialTheme.typography.bodyMedium,
@@ -162,11 +172,8 @@ fun ExercisesScreen(
                             Text("Plan workout")
                         }
                     } else {
-                        val mSummary = mTodayWorkout
-                            .take(2)
-                            .joinToString(" • ") { it.toWorkoutSummary() }
                         Text(
-                            text = mSummary,
+                            text = mPreviewWorkoutSummary,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -214,23 +221,20 @@ fun ExercisesScreen(
                 Icon(Icons.Default.DateRange, contentDescription = "History", modifier = Modifier.size(32.dp))
             }
         }
-
-        // Seal/character - consistent anchoring
-        AsyncImage(
-            model = musclesImageRequest,
-            contentDescription = "Seal",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.75f)
-                .padding(bottom = 20.dp)
-        )
+        
     }
 }
 
 private fun ExerciseLogEntity.toWorkoutSummary(): String {
     val mName = exerciseName.ifBlank { "Exercise" }
     val mMetricLabel = if (metric.startsWith("sets:")) "reps" else metric.ifBlank { "units" }
+    val mValueLabel = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else String.format("%.1f", quantity)
+    return "$mName ($mValueLabel $mMetricLabel)"
+}
+
+private fun CalendarPlanEntryEntity.toWorkoutSummary(): String {
+    val mName = exerciseName.ifBlank { "Exercise" }
+    val mMetricLabel = metric.ifBlank { "units" }
     val mValueLabel = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else String.format("%.1f", quantity)
     return "$mName ($mValueLabel $mMetricLabel)"
 }

@@ -81,6 +81,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-svg:2.7.0")
+    implementation("io.coil-kt:coil-gif:2.7.0")
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)

@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.TrendingUp
@@ -60,6 +62,8 @@ import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.data.repository.NutritionFoodEntryRepository
 import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.data.repository.TargetRepository
+import com.example.seally.profile.ProfileRepository
+import com.example.seally.profile.UserProfile
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +75,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.max
+import kotlin.math.round
 
 enum class GoalChartType {
     LINE,
@@ -211,6 +216,7 @@ enum class GoalMetric(
 data class GoalUiModel(
     val mId: Long,
     val mMetric: GoalMetric,
+    val mGoalDirection: GoalDirection,
     val mCurrentValue: Float,
     val mTargetValue: Float,
     val mHistoryValues: List<Float>,
@@ -362,7 +368,6 @@ private fun GoalCard(
 ) {
     val mProgress = goal.progress()
     val mColor = goal.mMetric.mAccentColor
-    val mIsGoalCompleted = mProgress >= 1f
 
     Surface(
         modifier = Modifier
@@ -402,29 +407,28 @@ private fun GoalCard(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = if (mIsGoalCompleted) "Goal Achieved!" else "In Progress",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (mIsGoalCompleted) mColor else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
                 
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
-                    CircularProgressIndicator(
-                        progress = { mProgress },
-                        modifier = Modifier.fillMaxSize(),
-                        color = mColor,
-                        strokeWidth = 5.dp,
-                        strokeCap = StrokeCap.Round,
-                        trackColor = mColor.copy(alpha = 0.1f)
-                    )
-                    Text(
-                        text = "${(mProgress * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GoalDirectionBadge(direction = goal.mGoalDirection, accentColor = mColor)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
+                        CircularProgressIndicator(
+                            progress = { mProgress },
+                            modifier = Modifier.fillMaxSize(),
+                            color = mColor,
+                            strokeWidth = 5.dp,
+                            strokeCap = StrokeCap.Round,
+                            trackColor = mColor.copy(alpha = 0.1f)
+                        )
+                        Text(
+                            text = "${(mProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 
@@ -474,7 +478,7 @@ private fun GoalCard(
                 gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                 labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 axisColor = MaterialTheme.colorScheme.outlineVariant,
-                isGoalCompleted = mIsGoalCompleted,
+                isGoalCompleted = mProgress >= 1f,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp),
@@ -527,6 +531,13 @@ private fun GoalDetailsDialog(
                             Text(goal.formatTarget(), style = MaterialTheme.typography.titleMedium)
                         }
                     }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GoalDirectionBadge(direction = goal.mGoalDirection, accentColor = mColor)
                 }
 
                 GoalChart(
@@ -1068,8 +1079,40 @@ private fun GoalDirectionButton(
     }
 }
 
+@Composable
+private fun GoalDirectionBadge(
+    direction: GoalDirection,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = accentColor.copy(alpha = 0.15f),
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                imageVector = direction.toIcon(),
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = if (direction == GoalDirection.AT_LEAST) "Above" else "Under",
+                style = MaterialTheme.typography.labelSmall,
+                color = accentColor,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
 fun GoalUiModel.progress(): Float {
-    return mMetric.calculateProgress(
+    return mGoalDirection.calculateProgress(
         currentValue = mCurrentValue,
         targetValue = mTargetValue,
     )
@@ -1106,16 +1149,13 @@ private fun formatCompactMetricValue(value: Float): String {
     }
 }
 
-private fun GoalMetric.calculateProgress(
+private fun GoalDirection.calculateProgress(
     currentValue: Float,
     targetValue: Float,
 ): Float {
     if (targetValue <= 0f) return 0f
 
-    return when (mGoalDirection) {
-        GoalDirection.AT_LEAST -> (currentValue / targetValue).coerceIn(0f, 1f)
-        GoalDirection.AT_MOST -> (currentValue / targetValue).coerceIn(0f, 1f)
-    }
+    return (currentValue / targetValue).coerceIn(0f, 1f)
 }
 
 private fun Float?.toInputValue(): String {
@@ -1136,6 +1176,7 @@ class GoalsViewModel(
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mExerciseLogRepository = ExerciseLogRepository(application)
+    private val mProfileRepository = ProfileRepository(application)
 
     private val mGoalsState = MutableStateFlow<List<GoalUiModel>>(emptyList())
     val mGoals: StateFlow<List<GoalUiModel>> = mGoalsState.asStateFlow()
@@ -1144,7 +1185,7 @@ class GoalsViewModel(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val today = LocalDate.now().toString()
-            combine(
+            val baseSnapshotFlow = combine(
                 mTargetRepository.observeTargets(),
                 mDailyGoalProgressRepository.observeByDate(today),
                 mNutritionFoodEntryRepository.observeByDate(today),
@@ -1156,7 +1197,12 @@ class GoalsViewModel(
                     mTodayProgress = todayProgress,
                     mFoodEntries = foodEntries,
                     mNutritionLog = nutritionLog,
+                    mProfile = UserProfile(),
                 )
+            }
+
+            combine(baseSnapshotFlow, mProfileRepository.profile) { snapshot, profile ->
+                snapshot.copy(mProfile = profile)
             }.collect { snapshot ->
                 if (!mHasBackfilledRecentHistory) {
                     backfillDerivedGoalProgressForRecentDays(snapshot.mTargets)
@@ -1177,6 +1223,7 @@ class GoalsViewModel(
                 val progressMap = snapshot.mTodayProgress.associateBy { it.goalName }
                 val uiModels = snapshot.mTargets.mapNotNull { target ->
                     val metric = GoalMetric.entries.firstOrNull { it.name == target.goalName } ?: return@mapNotNull null
+                    val goalDirection = metric.resolveGoalDirection(snapshot.mProfile)
                     val todayCurrentValue = progressMap[target.goalName]?.progressValue?.toFloat() ?: 0f
                     val historyDates = (HISTORY_POINT_COUNT - 1 downTo 0)
                         .map { offset -> LocalDate.now().minusDays(offset.toLong()).toString() }
@@ -1185,8 +1232,11 @@ class GoalsViewModel(
                         .associateBy { it.date }
                     val recentProgress = historyDates.map { date ->
                         val currentValue = progressByDate[date]?.progressValue?.toFloat() ?: 0f
-                        if (target.targetValue > 0.0) {
-                            (currentValue / target.targetValue.toFloat()).coerceAtLeast(0f)
+                        if (target.targetValue > 0.0 && target.targetValue.isFinite()) {
+                            goalDirection.calculateProgress(
+                                currentValue = currentValue,
+                                targetValue = target.targetValue.toFloat(),
+                            )
                         } else {
                             0f
                         }
@@ -1194,6 +1244,7 @@ class GoalsViewModel(
                     GoalUiModel(
                         mId = metric.toGoalId(),
                         mMetric = metric,
+                        mGoalDirection = goalDirection,
                         mCurrentValue = todayCurrentValue,
                         mTargetValue = target.targetValue.toFloat(),
                         mHistoryValues = recentProgress,
@@ -1236,6 +1287,45 @@ class GoalsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val goalName = GoalMetric.entries.firstOrNull { it.toGoalId() == id }?.name ?: return@launch
             mTargetRepository.deleteByGoalName(goalName)
+        }
+    }
+
+    fun createOnboardingGoals(
+        workoutDaysPerWeek: Int,
+        waterTargetMl: Int,
+        caloriesTarget: Int,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val today = LocalDate.now().toString()
+            val safeCaloriesTarget = caloriesTarget.coerceAtLeast(1200)
+            val proteinTargetGrams = (safeCaloriesTarget * 0.20) / 4.0
+            val carbsTargetGrams = (safeCaloriesTarget * 0.50) / 4.0
+            val fatsTargetGrams = (safeCaloriesTarget * 0.30) / 9.0
+            val sugarsTargetGrams = (safeCaloriesTarget * 0.10) / 4.0
+            val fibersTargetGrams = (safeCaloriesTarget / 1000.0) * 14.0
+
+            val onboardingTargets = listOf(
+                GoalMetric.EXERCISE_DAYS.name to workoutDaysPerWeek.toDouble().coerceIn(1.0, EXERCISE_GOAL_MAX_DAYS.toDouble()),
+                GoalMetric.WATER.name to waterTargetMl.toDouble().coerceAtLeast(0.0),
+                GoalMetric.CALORIES.name to safeCaloriesTarget.toDouble(),
+                GoalMetric.PROTEIN.name to proteinTargetGrams,
+                GoalMetric.CARBS.name to carbsTargetGrams,
+                GoalMetric.FATS.name to fatsTargetGrams,
+                GoalMetric.SUGARS.name to sugarsTargetGrams,
+                GoalMetric.FIBERS.name to fibersTargetGrams,
+            )
+
+            for ((goalName, targetValue) in onboardingTargets) {
+                mTargetRepository.upsertTarget(
+                    goalName = goalName,
+                    targetValue = round(targetValue),
+                )
+                mDailyGoalProgressRepository.setProgress(
+                    goalName = goalName,
+                    date = today,
+                    progressValue = 0.0,
+                )
+            }
         }
     }
 
@@ -1317,12 +1407,13 @@ class GoalsViewModel(
             .size
     }
 
-    private data class GoalSyncSnapshot(
-        val mTargets: List<com.example.seally.data.local.entity.TargetEntity>,
-        val mTodayProgress: List<com.example.seally.data.local.entity.DailyGoalProgressEntity>,
-        val mFoodEntries: List<NutritionFoodEntryEntity>,
-        val mNutritionLog: NutritionLogEntity?,
-    )
+private data class GoalSyncSnapshot(
+    val mTargets: List<com.example.seally.data.local.entity.TargetEntity>,
+    val mTodayProgress: List<com.example.seally.data.local.entity.DailyGoalProgressEntity>,
+    val mFoodEntries: List<NutritionFoodEntryEntity>,
+    val mNutritionLog: NutritionLogEntity?,
+    val mProfile: UserProfile,
+)
 
     companion object {
         private const val HISTORY_POINT_COUNT = 7
@@ -1340,3 +1431,19 @@ class GoalsViewModel(
 }
 
 private fun GoalMetric.toGoalId(): Long = ordinal.toLong() + 1L
+
+private fun GoalDirection.toIcon() = when (this) {
+    GoalDirection.AT_LEAST -> Icons.Default.KeyboardArrowUp
+    GoalDirection.AT_MOST -> Icons.Default.KeyboardArrowDown
+}
+
+private fun GoalMetric.resolveGoalDirection(profile: UserProfile): GoalDirection {
+    if (this != GoalMetric.CALORIES) return mGoalDirection
+    val weight = profile.weightKg
+    val goalWeight = profile.goalWeightKg
+    return if (weight != null && goalWeight != null && weight < goalWeight) {
+        GoalDirection.AT_LEAST
+    } else {
+        GoalDirection.AT_MOST
+    }
+}
