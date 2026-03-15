@@ -20,12 +20,6 @@ class XpViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = XpLeveling.levelState(0),
         )
 
-    fun addXp(delta: Int) {
-        viewModelScope.launch {
-            repo.addXp(delta)
-        }
-    }
-
     companion object {
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -39,4 +33,3 @@ class XpViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
-

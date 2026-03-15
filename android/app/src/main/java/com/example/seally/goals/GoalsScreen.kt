@@ -2,47 +2,36 @@ package com.example.seally.goals
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -57,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -71,6 +61,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.seally.ui.components.AppScreenBackground
+import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,26 +73,17 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.max
 
-private val mCardCornerRadius = 14.dp
-
-private val mPageBackground = Color(0xFFF4F7FC)
-private val mCardBackground = Color(0xFFFFFFFF)
-private val mCardBorder = Color(0xFFD8E1ED)
-private val mTitleColor = Color(0xFF1D2A3D)
-private val mBodyColor = Color(0xFF304154)
-private val mSubtleColor = Color(0xFF5A6B7F)
-
-private enum class GoalChartType {
+enum class GoalChartType {
     LINE,
     BAR,
 }
 
-private enum class GoalDirection {
+enum class GoalDirection {
     AT_LEAST,
     AT_MOST,
 }
 
-private enum class GoalMetric(
+enum class GoalMetric(
     val mLabel: String,
     val mUnit: String,
     val mAccentColor: Color,
@@ -109,6 +92,7 @@ private enum class GoalMetric(
     val mSuggestedCurrent: Float,
     val mSuggestedTarget: Float,
     val mDefaultLabels: List<String>,
+    val mIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
     STEPS(
         mLabel = "Steps",
@@ -119,6 +103,7 @@ private enum class GoalMetric(
         mSuggestedCurrent = 8_000f,
         mSuggestedTarget = 10_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.TrendingUp
     ),
     WEIGHT(
         mLabel = "Weight",
@@ -129,9 +114,10 @@ private enum class GoalMetric(
         mSuggestedCurrent = 170f,
         mSuggestedTarget = 150f,
         mDefaultLabels = emptyList(),
+        mIcon = Icons.Default.Flag
     ),
     RUNNING(
-        mLabel = "Running Distance",
+        mLabel = "Running",
         mUnit = "km",
         mAccentColor = Color(0xFFB17AE0),
         mChartType = GoalChartType.BAR,
@@ -139,9 +125,10 @@ private enum class GoalMetric(
         mSuggestedCurrent = 30f,
         mSuggestedTarget = 50f,
         mDefaultLabels = emptyList(),
+        mIcon = Icons.Default.TrendingUp
     ),
     WATER(
-        mLabel = "Water Intake",
+        mLabel = "Water",
         mUnit = "ml",
         mAccentColor = Color(0xFF4D8EFF),
         mChartType = GoalChartType.BAR,
@@ -149,6 +136,7 @@ private enum class GoalMetric(
         mSuggestedCurrent = 1_800f,
         mSuggestedTarget = 2_500f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.TrendingUp
     ),
     CALORIES(
         mLabel = "Calories",
@@ -159,20 +147,11 @@ private enum class GoalMetric(
         mSuggestedCurrent = 2_300f,
         mSuggestedTarget = 2_000f,
         mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
-    ),
-    MACROS(
-        mLabel = "Macros",
-        mUnit = "g",
-        mAccentColor = Color(0xFF8E72D8),
-        mChartType = GoalChartType.BAR,
-        mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedCurrent = 180f,
-        mSuggestedTarget = 220f,
-        mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
+        mIcon = Icons.Default.Flag
     ),
 }
 
-private data class GoalUiModel(
+data class GoalUiModel(
     val mId: Long,
     val mMetric: GoalMetric,
     val mCurrentValue: Float,
@@ -184,6 +163,7 @@ private data class GoalUiModel(
 @Composable
 fun GoalsScreen(
     modifier: Modifier = Modifier,
+    onProfileClick: () -> Unit = {},
 ) {
     val mViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val mGoals by mViewModel.mGoals.collectAsState()
@@ -193,79 +173,96 @@ fun GoalsScreen(
     val mTrackedMetrics = mGoals.map { it.mMetric }.toSet()
     val mAvailableMetrics = GoalMetric.entries.filterNot { it in mTrackedMetrics }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(mPageBackground)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+    Box(
+        modifier = modifier.fillMaxSize()
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        AppScreenBackground(assetPath = "backgrounds/goals.png")
+
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Text(
-                text = "Goals Tracker",
-                style = MaterialTheme.typography.headlineMedium,
-                color = mTitleColor,
-                fontWeight = FontWeight.ExtraBold,
-            )
+            TopHeader(onProfileClick = onProfileClick)
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EFFA)),
+            Column(
                 modifier = Modifier
-                    .border(
-                        width = 1.dp,
-                        color = Color(0xFFD1DDED),
-                        shape = RoundedCornerShape(18.dp),
-                    )
-                    .clickable(enabled = mAvailableMetrics.isNotEmpty()) { mShowAddGoalDialog = true },
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
             ) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     Text(
-                        text = "+",
-                        color = Color(0xFF2F7CDF),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        text = "Active Goals",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Add Goal",
-                        color = Color(0xFF2F3B4B),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                }
+
+                if (mGoals.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                        Surface(
+                            modifier = Modifier.padding(24.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.Flag,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "No tracking goals yet.\nStart by adding one below!",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(1),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 120.dp),
+                        modifier = Modifier.fillMaxSize().weight(1f),
+                    ) {
+                        items(items = mGoals, key = { it.mId }) { mGoal ->
+                            GoalCard(
+                                goal = mGoal,
+                                onClick = { mSelectedGoal = mGoal },
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (mGoals.isEmpty()) {
-            Text(
-                text = "No goals yet. Add a metric to start tracking progress.",
-                color = mSubtleColor,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            return@Column
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            items(items = mGoals, key = { it.mId }) { mGoal ->
-                GoalCard(
-                    goal = mGoal,
-                    onClick = { mSelectedGoal = mGoal },
-                )
+        // --- ADD GOAL BUTTON (Large & Stylized at Bottom Right) ---
+        if (mAvailableMetrics.isNotEmpty()) {
+            FloatingActionButton(
+                onClick = { mShowAddGoalDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .size(72.dp),
+                elevation = FloatingActionButtonDefaults.elevation(8.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Goal", modifier = Modifier.size(36.dp))
             }
         }
     }
@@ -306,116 +303,120 @@ private fun GoalCard(
     val mColor = goal.mMetric.mAccentColor
     val mIsGoalCompleted = mProgress >= 1f
 
-    Card(
-        shape = RoundedCornerShape(mCardCornerRadius),
-        colors = CardDefaults.cardColors(containerColor = mCardBackground),
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(320.dp)
-            .border(
-                width = 1.dp,
-                color = mCardBorder,
-                shape = RoundedCornerShape(mCardCornerRadius),
-            )
             .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = "${goal.mMetric.mLabel} Goal",
-                color = mTitleColor,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
-            )
-
-            HorizontalDivider(
-                color = Color(0xFFE4EAF3),
-                thickness = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = true)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text = goal.formattedCurrentAndTarget(),
-                    color = mBodyColor,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LinearProgressIndicator(
-                    progress = { mProgress },
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .height(if (mIsGoalCompleted) 8.dp else 6.dp),
-                    color = mColor,
-                    trackColor = Color(0xFFDCE5F0),
-                    strokeCap = StrokeCap.Round,
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                GoalChart(
-                    values = goal.mHistoryValues,
-                    labels = goal.mChartLabels,
-                    chartType = goal.mMetric.mChartType,
-                    chartColor = mColor,
-                    gridColor = Color(0xFFC9D5E4),
-                    labelColor = Color(0xFF62768D),
-                    axisColor = Color(0xFFAEC0D5),
-                    isGoalCompleted = mIsGoalCompleted,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(114.dp),
-                )
-            }
-
-            HorizontalDivider(
-                color = Color(0xFFE4EAF3),
-                thickness = 1.dp,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = mColor.copy(alpha = 0.15f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = goal.mMetric.mIcon,
+                                contentDescription = null,
+                                tint = mColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = goal.mMetric.mLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (mIsGoalCompleted) "Goal Achieved!" else "In Progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (mIsGoalCompleted) mColor else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(52.dp)) {
+                    CircularProgressIndicator(
+                        progress = { mProgress },
+                        modifier = Modifier.fillMaxSize(),
+                        color = mColor,
+                        strokeWidth = 5.dp,
+                        strokeCap = StrokeCap.Round,
+                        trackColor = mColor.copy(alpha = 0.1f)
+                    )
+                    Text(
+                        text = "${(mProgress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    Text(
+                        text = "Current",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = goal.formatCurrent(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Target",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = goal.formatTarget(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            GoalChart(
+                values = goal.mHistoryValues,
+                labels = goal.mChartLabels,
+                chartType = goal.mMetric.mChartType,
+                chartColor = mColor,
+                gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                axisColor = MaterialTheme.colorScheme.outlineVariant,
+                isGoalCompleted = mIsGoalCompleted,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Progress:",
-                    color = mSubtleColor,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-
-                Spacer(modifier = Modifier.width(5.dp))
-
-                Text(
-                    text = "${(mProgress * 100).toInt()}%",
-                    color = mColor,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Text(
-                    text = "Details",
-                    color = Color(0xFF3D6FA8),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+                    .height(80.dp),
+            )
         }
     }
 }
@@ -435,79 +436,85 @@ private fun GoalDetailsDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "${goal.mMetric.mLabel} Goal Details",
-                color = mTitleColor,
+                text = "${goal.mMetric.mLabel} Progress",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                Text(
-                    text = "Current: ${goal.formatCurrent()}",
-                    color = mBodyColor,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = "Target: ${goal.formatTarget()}",
-                    color = mBodyColor,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = "Completion: ${(mProgress * 100f).toInt()}%",
-                    color = mColor,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                )
+                Surface(
+                    color = mColor.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("CURRENT", style = MaterialTheme.typography.labelSmall, color = mColor, fontWeight = FontWeight.Bold)
+                            Text(goal.formatCurrent(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("GOAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(goal.formatTarget(), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
 
                 GoalChart(
                     values = goal.mHistoryValues,
                     labels = goal.mChartLabels,
                     chartType = goal.mMetric.mChartType,
                     chartColor = mColor,
-                    gridColor = Color(0xFFC9D5E4),
-                    labelColor = Color(0xFF62768D),
-                    axisColor = Color(0xFFAEC0D5),
+                    gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    axisColor = MaterialTheme.colorScheme.outlineVariant,
                     isGoalCompleted = mIsGoalCompleted,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(190.dp),
+                        .height(180.dp),
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Text("Close Details")
             }
         },
         dismissButton = {
-            TextButton(onClick = { mShowDeleteConfirm = true }) {
-                Text(
-                    text = "Delete",
-                    color = Color(0xFFC13F3A),
-                )
+            IconButton(onClick = { mShowDeleteConfirm = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
             }
         },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surface
     )
 
     if (mShowDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { mShowDeleteConfirm = false },
-            title = { Text("Delete goal container?") },
-            text = { Text("This will remove the selected goal from your tracker.") },
+            title = { Text("Stop tracking goal?") },
+            text = { Text("Are you sure you want to delete '${goal.mMetric.mLabel}'? All history will be lost.") },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         mShowDeleteConfirm = false
                         onDelete()
                     },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text = "Delete",
-                        color = Color(0xFFC13F3A),
-                    )
+                    Text("Delete Goal")
                 }
             },
             dismissButton = {
@@ -515,6 +522,7 @@ private fun GoalDetailsDialog(
                     Text("Cancel")
                 }
             },
+            shape = RoundedCornerShape(28.dp)
         )
     }
 }
@@ -588,42 +596,46 @@ private fun GoalChart(
                 }
 
                 val mLinePath = Path().apply {
-                    moveTo(mPoints.first().x, mPoints.first().y)
-                    mPoints.drop(1).forEach { mPoint -> lineTo(mPoint.x, mPoint.y) }
+                    if (mPoints.isNotEmpty()) {
+                        moveTo(mPoints.first().x, mPoints.first().y)
+                        mPoints.drop(1).forEach { mPoint -> lineTo(mPoint.x, mPoint.y) }
+                    }
                 }
 
-                val mFillPath = Path().apply {
-                    addPath(mLinePath)
-                    lineTo(mPoints.last().x, mBottomY)
-                    lineTo(mPoints.first().x, mBottomY)
-                    close()
-                }
+                if (mPoints.isNotEmpty()) {
+                    val mFillPath = Path().apply {
+                        addPath(mLinePath)
+                        lineTo(mPoints.last().x, mBottomY)
+                        lineTo(mPoints.first().x, mBottomY)
+                        close()
+                    }
 
-                drawPath(
-                    path = mFillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(chartColor.copy(alpha = 0.35f), chartColor.copy(alpha = 0.06f)),
-                        startY = mTopY,
-                        endY = mBottomY,
-                    ),
-                    style = Fill,
-                )
-
-                drawPath(
-                    path = mLinePath,
-                    color = chartColor,
-                    style = Stroke(
-                        width = if (isGoalCompleted) 3.8.dp.toPx() else 2.3.dp.toPx(),
-                        cap = StrokeCap.Round,
-                    ),
-                )
-
-                mPoints.forEach { mPoint ->
-                    drawCircle(
-                        color = chartColor.copy(alpha = 0.9f),
-                        radius = 2.2.dp.toPx(),
-                        center = mPoint,
+                    drawPath(
+                        path = mFillPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(chartColor.copy(alpha = 0.35f), chartColor.copy(alpha = 0.06f)),
+                            startY = mTopY,
+                            endY = mBottomY,
+                        ),
+                        style = Fill,
                     )
+
+                    drawPath(
+                        path = mLinePath,
+                        color = chartColor,
+                        style = Stroke(
+                            width = if (isGoalCompleted) 3.8.dp.toPx() else 2.3.dp.toPx(),
+                            cap = StrokeCap.Round,
+                        ),
+                    )
+
+                    mPoints.forEach { mPoint ->
+                        drawCircle(
+                            color = chartColor.copy(alpha = 0.9f),
+                            radius = 2.2.dp.toPx(),
+                            center = mPoint,
+                        )
+                    }
                 }
             }
 
@@ -646,7 +658,7 @@ private fun GoalChart(
                     Text(
                         text = mLabel,
                         color = labelColor,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f),
                     )
@@ -669,7 +681,6 @@ private fun AddGoalDialog(
     var mTargetValue by remember {
         mutableStateOf(availableMetrics.firstOrNull()?.mSuggestedTarget.toInputValue())
     }
-    var mShowMetricsDropdown by remember { mutableStateOf(false) }
 
     LaunchedEffect(mSelectedMetric) {
         mSelectedMetric?.let { mMetric ->
@@ -684,59 +695,61 @@ private fun AddGoalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Track new metric") },
+        title = { Text(text = "Place New Goal", fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
+                // Metric Grid Selector
                 Text(
-                    text = "Select metric",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = mBodyColor,
+                    text = "SELECT METRIC",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = mSelectedMetric?.mLabel.orEmpty(),
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        label = { Text("Metric") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { mShowMetricsDropdown = true },
-                    )
-
-                    DropdownMenu(
-                        expanded = mShowMetricsDropdown,
-                        onDismissRequest = { mShowMetricsDropdown = false },
-                        modifier = Modifier.fillMaxWidth(0.9f),
-                    ) {
-                        availableMetrics.forEach { mMetric ->
-                            DropdownMenuItem(
-                                text = { Text(mMetric.mLabel) },
-                                onClick = {
-                                    mSelectedMetric = mMetric
-                                    mShowMetricsDropdown = false
-                                },
-                            )
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.height(180.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(availableMetrics) { metric ->
+                        val isSelected = mSelectedMetric == metric
+                        Surface(
+                            onClick = { mSelectedMetric = metric },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) metric.mAccentColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.aspectRatio(1f),
+                            border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Icon(metric.mIcon, contentDescription = null, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(metric.mLabel, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 1)
+                            }
                         }
                     }
                 }
 
                 mSelectedMetric?.let { mMetric ->
                     val mDirectionText = if (mMetric.mGoalDirection == GoalDirection.AT_LEAST) {
-                        "Recommended target is at least ${mMetric.mSuggestedTarget.toInputValue()} ${mMetric.mUnit}."
+                        "Set a target of at least ${mMetric.mUnit}"
                     } else {
-                        "Recommended target is at most ${mMetric.mSuggestedTarget.toInputValue()} ${mMetric.mUnit}."
+                        "Stay below a target of ${mMetric.mUnit}"
                     }
                     Text(
                         text = mDirectionText,
-                        color = mSubtleColor,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -744,34 +757,41 @@ private fun AddGoalDialog(
                     value = mCurrentValue,
                     onValueChange = { mCurrentValue = it },
                     singleLine = true,
-                    label = { Text("Current value") },
+                    label = { Text("Starting Value") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                 )
 
                 OutlinedTextField(
                     value = mTargetValue,
                     onValueChange = { mTargetValue = it },
                     singleLine = true,
-                    label = { Text("Target value") },
+                    label = { Text("Goal Target") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null) }
                 )
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = { mSelectedMetric?.let { onGoalAdded(it, mCurrent, mTarget) } },
                 enabled = mCanAdd,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
-                Text("Add")
+                Text("Start Tracking Goal", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
+        shape = RoundedCornerShape(32.dp)
     )
 }
 
@@ -783,14 +803,6 @@ private fun buildDefaultGoals(): List<GoalUiModel> = listOf(
         mTargetValue = 10_000f,
         mHistoryValues = listOf(0.18f, 0.25f, 0.43f, 0.39f, 0.57f, 0.44f, 0.53f),
         mChartLabels = GoalMetric.STEPS.mDefaultLabels,
-    ),
-    GoalUiModel(
-        mId = 2L,
-        mMetric = GoalMetric.CALORIES,
-        mCurrentValue = 1_850f,
-        mTargetValue = 2_200f,
-        mHistoryValues = listOf(0.62f, 0.68f, 0.7f, 0.74f, 0.78f, 0.82f, 0.84f),
-        mChartLabels = GoalMetric.CALORIES.mDefaultLabels,
     ),
     GoalUiModel(
         mId = 3L,
@@ -815,7 +827,7 @@ private fun buildTrendValues(progress: Float): List<Float> {
     )
 }
 
-private fun GoalUiModel.progress(): Float {
+fun GoalUiModel.progress(): Float {
     return mMetric.calculateProgress(
         currentValue = mCurrentValue,
         targetValue = mTargetValue,
@@ -883,7 +895,6 @@ interface GoalDao {
     @Query("SELECT * FROM goals ORDER BY mId ASC")
     fun observeAll(): Flow<List<GoalEntity>>
 
-    // Keep existing one-shot query if you still need it elsewhere
     @Query("SELECT * FROM goals ORDER BY mId ASC")
     suspend fun getAll(): List<GoalEntity>
 
@@ -998,7 +1009,7 @@ private class GoalsRepository(
     }
 }
 
-private class GoalsViewModel(
+class GoalsViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val mRepository = GoalsRepository(
@@ -1043,14 +1054,12 @@ private class GoalsViewModel(
                 mChartLabels = mMetric.mDefaultLabels,
             )
             mRepository.upsertGoal(mNewGoal)
-            // No manual mGoalsState update here; DB Flow will emit and refresh UI instantly.
         }
     }
 
     fun deleteGoal(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             mRepository.deleteGoal(id)
-            // No manual mGoalsState update here; DB Flow will emit and refresh UI instantly.
         }
     }
 

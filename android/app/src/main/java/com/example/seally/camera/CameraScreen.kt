@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -161,9 +163,7 @@ fun CameraScreen(
         mHasShownEntryGuide = true
     }
 
-    val mMessageToAnnounce = uiState.mErrorMessage
-        ?: uiState.mFormFeedback.mErrorMessage
-        ?: uiState.mFormFeedback.mSpeechCue
+    val mMessageToAnnounce = uiState.mErrorMessage ?: uiState.mFormFeedback.mSpeechCue
     val mErrorSpeechAnnouncer = remember(context) { ErrorSpeechAnnouncer(context) }
 
     LaunchedEffect(mMessageToAnnounce) {
@@ -261,7 +261,8 @@ fun CameraScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp),
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(onClick = {
@@ -292,7 +293,8 @@ fun CameraScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(12.dp)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
                     .background(Color(0x88000000))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
@@ -304,6 +306,7 @@ fun CameraScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(12.dp),
         )
     }
@@ -317,6 +320,7 @@ private fun createExerciseGuideIntent(
         ExerciseType.SQUAT -> SquatGuideActivity::class.java
         ExerciseType.PLANK -> PlankGuideActivity::class.java
         ExerciseType.PULLUP -> PullupGuideActivity::class.java
+        ExerciseType.PUSHUP -> PushupGuideActivity::class.java
     }
     return Intent(context, activityClass)
 }
@@ -331,6 +335,7 @@ private fun FeedbackPanel(
         ExerciseType.SQUAT -> "Squat"
         ExerciseType.PLANK -> "Plank"
         ExerciseType.PULLUP -> "Pullup"
+        ExerciseType.PUSHUP -> "Push-up"
     }
     val statusText = when (feedback.mStatus) {
         ExerciseStatus.INITIALIZING -> "Initializing"
@@ -350,12 +355,24 @@ private fun FeedbackPanel(
                 append(feedback.mRepCount)
                 append(" • Phase: ")
                 append(feedback.mCurrentPhase.name.lowercase().replaceFirstChar { it.titlecase() })
+                feedback.mDebugKneeAngleDeg?.let { currentKneeAngle ->
+                    append(" • Knee: ")
+                    append(String.format(Locale.US, "%.1f°", currentKneeAngle))
+                }
+                feedback.mDebugMinKneeAngleDeg?.let { minKneeAngle ->
+                    append(" • Min knee: ")
+                    append(String.format(Locale.US, "%.1f°", minKneeAngle))
+                }
             }
             ExerciseType.PLANK -> {
                 append(" • Timer: ")
                 append(formatDuration(feedback.mHoldDurationMs))
             }
             ExerciseType.PULLUP -> {
+                append(" • Reps: ")
+                append(feedback.mRepCount)
+            }
+            ExerciseType.PUSHUP -> {
                 append(" • Reps: ")
                 append(feedback.mRepCount)
             }

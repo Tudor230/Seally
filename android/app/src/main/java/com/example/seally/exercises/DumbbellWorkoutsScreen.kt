@@ -1,112 +1,112 @@
 package com.example.seally.exercises
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.seally.camera.ExerciseType
+import com.example.seally.ui.components.AppScreenBackground
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DumbbellWorkoutsScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onExerciseSelected: (ExerciseType) -> Unit = {},
 ) {
-    var mSelectedExerciseIndex by rememberSaveable { mutableIntStateOf(-1) }
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        AppScreenBackground(assetPath = "backgrounds/form_validator.png")
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Form Correctors", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 20.dp),
         ) {
-            Text(
-                text = "Pick an exercise to start form checking.",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                WorkoutPlanCard(
-                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = mSelectedExerciseIndex == 0,
-                    onClick = {
-                        mSelectedExerciseIndex = 0
-                        onExerciseSelected(ExerciseType.SQUAT)
-                    },
-                    title = "Squat",
-                    details = "Side-view squat depth and form checker",
-                    duration = "Form check",
-                )
-                WorkoutPlanCard(
-                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = mSelectedExerciseIndex == 1,
-                    onClick = {
-                        mSelectedExerciseIndex = 1
-                        onExerciseSelected(ExerciseType.PLANK)
-                    },
-                    title = "Plank",
-                    details = "Core alignment and hold feedback checker",
-                    duration = "Form check",
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), CircleShape)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "Form Correctors",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+
+            Text(
+                text = "Select an exercise to start AI form analysis.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 WorkoutPlanCard(
-                    modifier = Modifier.weight(1f).aspectRatio(1f),
-                    isSelected = mSelectedExerciseIndex == 2,
-                    onClick = {
-                        mSelectedExerciseIndex = 2
-                        onExerciseSelected(ExerciseType.PULLUP)
-                    },
+                    title = "Squat",
+                    details = "Side-view squat depth and form checker",
+                    color = Color(0xFFDE7C64),
+                    onClick = { onExerciseSelected(ExerciseType.SQUAT) }
+                )
+                WorkoutPlanCard(
+                    title = "Plank",
+                    details = "Core alignment and hold feedback checker",
+                    color = Color(0xFF4D8EFF),
+                    onClick = { onExerciseSelected(ExerciseType.PLANK) }
+                )
+                WorkoutPlanCard(
                     title = "Pull-up",
                     details = "Dead hang to top-position feedback checker",
-                    duration = "Form check",
+                    color = Color(0xFF63B95B),
+                    onClick = { onExerciseSelected(ExerciseType.PULLUP) }
                 )
+                WorkoutPlanCard(
+                    title = "Push-up",
+                    details = "Depth and body-line feedback checker",
+                    color = Color(0xFF6E56CF),
+                    onClick = { onExerciseSelected(ExerciseType.PUSHUP) }
+                )
+                
+                Spacer(modifier = Modifier.height(100.dp))
             }
         }
     }
@@ -114,43 +114,55 @@ fun DumbbellWorkoutsScreen(
 
 @Composable
 private fun WorkoutPlanCard(
-    modifier: Modifier = Modifier,
-    isSelected: Boolean,
-    onClick: () -> Unit,
     title: String,
     details: String,
-    duration: String,
+    color: Color,
+    onClick: () -> Unit,
 ) {
-    Card(
-        modifier = modifier
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            },
-        ),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
     ) {
-        Column(
-            modifier = Modifier.padding(PaddingValues(14.dp)),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = details,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                text = duration,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Surface(
+                color = color.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(56.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.FitnessCenter,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = details,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

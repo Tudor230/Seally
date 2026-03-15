@@ -3,6 +3,7 @@ import { Room, RoomEvent } from 'livekit-client'
 import { generateViewerToken, generateRoomCode } from './lib/livekitToken'
 import './App.css'
 
+const LANDMARK_URL = import.meta.env.VITE_LIVEKIT_URL || ''
 const LANDMARK_TOPIC = import.meta.env.VITE_LIVEKIT_LANDMARK_TOPIC || 'pose.binary.v2'
 const FORCE_RELAY = (import.meta.env.VITE_LIVEKIT_FORCE_RELAY || 'true') !== 'false'
 const LANDMARK_PACKET_VERSION = 2
@@ -10,6 +11,8 @@ const LANDMARK_PACKET_HEADER_BYTES = 16
 const LANDMARK_PACKET_BYTES_PER_LANDMARK = 6
 const LANDMARK_SCALE = 10000
 const FRONT_CAMERA_FLAG = 0x01
+const PROBLEMATIC_JOINTS_FLAG = 0x02
+const PROBLEMATIC_JOINTS_BYTES = 4
 const POSE_CONNECTIONS = [
   [0, 1], [0, 4], [1, 2], [2, 3], [3, 7], [4, 5], [5, 6], [6, 8],
   [9, 10], [11, 12],
@@ -23,21 +26,22 @@ const POSE_CONNECTIONS = [
   [28, 30], [30, 32],
 ]
 
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || ''
+
 function App() {
-  const [mUrl, setMUrl] = useState(import.meta.env.VITE_LIVEKIT_URL || '')
   const [mRoomCode, setMRoomCode] = useState('')
   const [mToken, setMToken] = useState('')
   const [mStatus, setMStatus] = useState('Disconnected')
   const [mError, setMError] = useState('')
   const [mDebug, setMDebug] = useState('No remote participants.')
-  const [mLandmarkSeq, setMLandmarkSeq] = useState(null)
-  const [mLandmarkCount, setMLandmarkCount] = useState(0)
-  const [mReceivedPps, setMReceivedPps] = useState(0)
   const [mSkeletonFrame, setMSkeletonFrame] = useState(null)
   const [mRoom, setMRoom] = useState(null)
+  const [mRotation, setMRotation] = useState(0)
+  const [mIsFullscreen, setIsFullscreen] = useState(false)
   const mCanvasRef = useRef(null)
   const mRxWindowStartMsRef = useRef(0)
   const mRxWindowPacketCountRef = useRef(0)
+  const mVideoStageRef = useRef(null)
 
   const decodeLandmarkPacket = (payload) => {
     const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
@@ -51,7 +55,12 @@ function App() {
     }
 
     const landmarkCount = view.getUint16(2, true)
-    const expectedBytes = LANDMARK_PACKET_HEADER_BYTES + (landmarkCount * LANDMARK_PACKET_BYTES_PER_LANDMARK)
+    const flags = view.getUint8(1)
+    const isFrontCamera = (flags & FRONT_CAMERA_FLAG) !== 0
+    const hasProblematicJoints = (flags & PROBLEMATIC_JOINTS_FLAG) !== 0
+
+    const expectedExtraBytes = hasProblematicJoints ? PROBLEMATIC_JOINTS_BYTES : 0
+    const expectedBytes = LANDMARK_PACKET_HEADER_BYTES + (landmarkCount * LANDMARK_PACKET_BYTES_PER_LANDMARK) + expectedExtraBytes
     if (view.byteLength !== expectedBytes) {
       throw new Error(`invalid packet size ${view.byteLength}, expected ${expectedBytes}`)
     }
@@ -59,8 +68,6 @@ function App() {
     const sequence = view.getUint32(4, true)
     const frameWidth = view.getUint16(12, true)
     const frameHeight = view.getUint16(14, true)
-    const flags = view.getUint8(1)
-    const isFrontCamera = (flags & FRONT_CAMERA_FLAG) !== 0
     const landmarks = []
     let offset = LANDMARK_PACKET_HEADER_BYTES
     for (let index = 0; index < landmarkCount; index += 1) {
@@ -70,7 +77,43 @@ function App() {
       landmarks.push({ x, y, z })
       offset += LANDMARK_PACKET_BYTES_PER_LANDMARK
     }
-    return { sequence, landmarkCount, frameWidth, frameHeight, isFrontCamera, landmarks }
+
+    let problematicBitmask = 0
+    if (hasProblematicJoints) {
+      problematicBitmask = view.getUint32(offset, true)
+      console.log('Problematic joints bitmask:', problematicBitmask.toString(2), 'joints:', getProblematicJointIndices(problematicBitmask).map(i => jointNames[i] || i))
+    }
+
+    return { sequence, landmarkCount, frameWidth, frameHeight, isFrontCamera, landmarks, problematicBitmask }
+  }
+
+  const jointNames = {
+    0: 'nose',
+    1: 'left_eye_inner', 2: 'left_eye', 3: 'left_eye_outer',
+    4: 'right_eye_inner', 5: 'right_eye', 6: 'right_eye_outer',
+    7: 'left_ear', 8: 'right_ear',
+    9: 'mouth_left', 10: 'mouth_right',
+    11: 'left_shoulder', 12: 'right_shoulder',
+    13: 'left_elbow', 14: 'right_elbow',
+    15: 'left_wrist', 16: 'right_wrist',
+    17: 'left_pinky', 18: 'right_pinky',
+    19: 'left_index', 20: 'right_index',
+    21: 'left_thumb', 22: 'right_thumb',
+    23: 'left_hip', 24: 'right_hip',
+    25: 'left_knee', 26: 'right_knee',
+    27: 'left_ankle', 28: 'right_ankle',
+    29: 'left_heel', 30: 'right_heel',
+    31: 'left_foot_index', 32: 'right_foot_index',
+  }
+
+  const getProblematicJointIndices = (bitmask) => {
+    const indices = []
+    for (let i = 0; i < 33; i += 1) {
+      if ((bitmask & (1 << i)) !== 0) {
+        indices.push(i)
+      }
+    }
+    return indices
   }
 
   const drawSkeleton = (frame) => {
@@ -94,34 +137,118 @@ function App() {
       return
     }
 
-    const scale = Math.max(renderWidth / frame.frameWidth, renderHeight / frame.frameHeight)
-    const scaledFrameWidth = frame.frameWidth * scale
-    const scaledFrameHeight = frame.frameHeight * scale
-    const offsetX = (renderWidth - scaledFrameWidth) / 2
-    const offsetY = (renderHeight - scaledFrameHeight) / 2
+    // Apply user-selected rotation
+    const isQuarterTurn = mRotation === 90 || mRotation === 270
 
-    const mapX = (normalizedX) => {
-      const mirroredX = frame.isFrontCamera ? 1 - normalizedX : normalizedX
-      return (mirroredX * scaledFrameWidth) + offsetX
+    // Calculate body bounding box from landmarks (in normalized 0-1 space)
+    let minX = 1, maxX = 0, minY = 1, maxY = 0
+    let hasValidLandmarks = false
+    for (const landmark of frame.landmarks) {
+      if (landmark && landmark.x >= 0 && landmark.x <= 1 && landmark.y >= 0 && landmark.y <= 1) {
+        let x = landmark.x
+        let y = landmark.y
+
+        // Apply rotation to bounding box calculation
+        if (mRotation === 90) {
+          const temp = x
+          x = y
+          y = 1 - temp
+        } else if (mRotation === 180) {
+          x = 1 - x
+          y = 1 - y
+        } else if (mRotation === 270) {
+          const temp = x
+          x = 1 - y
+          y = temp
+        }
+
+        // Mirror for front camera
+        const mirroredX = frame.isFrontCamera ? 1 - x : x
+
+        minX = Math.min(minX, mirroredX)
+        maxX = Math.max(maxX, mirroredX)
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y)
+        hasValidLandmarks = true
+      }
     }
-    const mapY = (normalizedY) => (normalizedY * scaledFrameHeight) + offsetY
 
-    ctx.strokeStyle = '#00ffff'
+    if (!hasValidLandmarks) return
+
+    const bodyWidth = maxX - minX
+    const bodyHeight = maxY - minY
+
+    // Use body dimensions for scaling instead of frame dimensions
+    const padding = 0.9
+    const scale = Math.min(
+      renderWidth / (bodyWidth || 1),
+      renderHeight / (bodyHeight || 1)
+    ) * padding
+
+    const scaledBodyWidth = bodyWidth * scale
+    const scaledBodyHeight = bodyHeight * scale
+
+    const mapPoint = (landmark) => {
+      if (!landmark) return null
+
+      let x = landmark.x
+      let y = landmark.y
+
+      // Apply rotation
+      if (mRotation === 90) {
+        // 90° clockwise: (x, y) -> (y, 1-x)
+        const temp = x
+        x = y
+        y = 1 - temp
+      } else if (mRotation === 180) {
+        // 180°: (x, y) -> (1-x, 1-y)
+        x = 1 - x
+        y = 1 - y
+      } else if (mRotation === 270) {
+        // 270° clockwise: (x, y) -> (1-y, x)
+        const temp = x
+        x = 1 - y
+        y = temp
+      }
+
+      // Mirror for front camera
+      const mirroredX = frame.isFrontCamera ? 1 - x : x
+
+      // Scale and center the landmark
+      return {
+        x: ((mirroredX - minX) * scale) + (renderWidth - scaledBodyWidth) / 2,
+        y: ((y - minY) * scale) + (renderHeight - scaledBodyHeight) / 2
+      }
+    }
+
+    const isProblematicJoint = (index) => {
+      if (!frame.problematicBitmask) return false
+      return (frame.problematicBitmask & (1 << index)) !== 0
+    }
+
+    // Draw connections - use red only for connections between two problematic joints
     ctx.lineWidth = 3
     for (const [startIndex, endIndex] of POSE_CONNECTIONS) {
-      const start = frame.landmarks[startIndex]
-      const end = frame.landmarks[endIndex]
+      const start = mapPoint(frame.landmarks[startIndex])
+      const end = mapPoint(frame.landmarks[endIndex])
       if (!start || !end) continue
+
+      const isProblematic = isProblematicJoint(startIndex) && isProblematicJoint(endIndex)
+      ctx.strokeStyle = isProblematic ? '#ff4444' : '#00ffff'
       ctx.beginPath()
-      ctx.moveTo(mapX(start.x), mapY(start.y))
-      ctx.lineTo(mapX(end.x), mapY(end.y))
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
       ctx.stroke()
     }
 
-    ctx.fillStyle = '#ffe300'
-    for (const landmark of frame.landmarks) {
+    // Draw joints - red for problematic, yellow for normal
+    for (let i = 0; i < frame.landmarks.length; i += 1) {
+      const landmark = frame.landmarks[i]
+      const point = mapPoint(landmark)
+      if (!point) continue
+      ctx.fillStyle = isProblematicJoint(i) ? '#ff4444' : '#ffe300'
       ctx.beginPath()
-      ctx.arc(mapX(landmark.x), mapY(landmark.y), 4, 0, Math.PI * 2)
+      ctx.arc(point.x, point.y, 5, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -136,6 +263,16 @@ function App() {
     drawSkeleton(mSkeletonFrame)
   }, [mSkeletonFrame])
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
   const inspectParticipants = (room) => {
     const lines = []
     for (const participant of room.remoteParticipants.values()) {
@@ -144,9 +281,10 @@ function App() {
     setMDebug(lines.length ? `Participants: ${lines.join(', ')}` : 'No remote participants.')
   }
 
-  const handleConnect = async () => {
-    if (!mUrl.trim() || !mToken.trim()) {
-      setMError('Missing URL/token.')
+  const handleConnect = async (token) => {
+    const tokenToUse = token || mToken
+    if (!tokenToUse.trim()) {
+      setMError('Missing token.')
       return
     }
 
@@ -174,14 +312,10 @@ function App() {
         mRxWindowPacketCountRef.current += 1
         const elapsedMs = nowMs - mRxWindowStartMsRef.current
         if (elapsedMs >= 1000) {
-          const packetsPerSecond = Math.round((mRxWindowPacketCountRef.current * 1000) / elapsedMs)
-          setMReceivedPps(packetsPerSecond)
           mRxWindowStartMsRef.current = nowMs
           mRxWindowPacketCountRef.current = 0
         }
 
-        setMLandmarkSeq(data.sequence)
-        setMLandmarkCount(data.landmarkCount)
         setMSkeletonFrame(data)
         setMError('')
         setMStatus(`Connected (landmarks from ${participant?.identity || 'unknown'})`)
@@ -193,16 +327,14 @@ function App() {
     room.on(RoomEvent.Disconnected, () => {
       setMStatus('Disconnected')
       setMDebug('No remote participants.')
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMSkeletonFrame(null)
     })
 
     try {
-      await room.connect(mUrl.trim(), mToken.trim())
+      await room.connect(LIVEKIT_URL, tokenToUse.trim())
       setMRoom(room)
-      setMReceivedPps(0)
       mRxWindowStartMsRef.current = 0
       mRxWindowPacketCountRef.current = 0
       setMStatus('Connected (waiting for landmarks)')
@@ -221,6 +353,8 @@ function App() {
       setMRoomCode(code)
       setMToken(token)
       setMError('')
+      // Auto-connect after generating token
+      await handleConnect(token)
     } catch (error) {
       setMError(`Failed to generate room code: ${error.message}`)
     }
@@ -231,54 +365,72 @@ function App() {
     setMRoom(null)
     setMStatus('Disconnected')
     setMDebug('No remote participants.')
-    setMReceivedPps(0)
     mRxWindowStartMsRef.current = 0
     mRxWindowPacketCountRef.current = 0
     setMSkeletonFrame(null)
   }
 
+  const handleRotateLeft = () => {
+    setMRotation((prev) => (prev - 90 + 360) % 360)
+  }
+
+  const handleRotateRight = () => {
+    setMRotation((prev) => (prev + 90) % 360)
+  }
+
+  const handleResetRotation = () => {
+    setMRotation(0)
+  }
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mVideoStageRef.current?.requestFullscreen()
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen()
+      setIsFullscreen(false)
+    }
+  }
+
   return (
     <main className="page">
-      <h1>Seally LiveKit Skeleton Receiver</h1>
+      <header className="hero">
+        <h1>Seally Ice Harbor</h1>
+        <p className="hero-subtitle">
+          Monitor live seal-motion landmarks from mobile in an ocean-inspired control room.
+        </p>
+      </header>
 
       <section className="panel">
-        <label>
-          LiveKit URL
-          <input value={mUrl} onChange={(event) => setMUrl(event.target.value)} />
-        </label>
         <div className="actions">
-          <button disabled={!!mRoomCode} onClick={handleGenerateRoomCode}>
-            Generate Room Code
+          <button disabled={!!mRoom} onClick={handleGenerateRoomCode}>
+            Generate Seal Room Code
           </button>
         </div>
         {mRoomCode && (
           <div className="room-code-display">
             <p><strong>Room Code:</strong> <span className="code">{mRoomCode}</span></p>
-            <p className="hint">Enter this code on the mobile app to connect</p>
+            <p className="hint">Share this code with the mobile seal tracker to dock the session</p>
           </div>
         )}
-        {mToken && (
-          <label>
-            Token (auto-generated)
-            <textarea value={mToken} readOnly />
-          </label>
-        )}
-        <div className="actions">
-          <button disabled={!!mRoom} onClick={handleConnect}>Connect</button>
-          <button disabled={!mRoom} onClick={handleDisconnect}>Disconnect</button>
-        </div>
       </section>
 
       <section className="status">
-        <p><strong>Status:</strong> {mStatus}</p>
-        <p><strong>Topic:</strong> {LANDMARK_TOPIC}</p>
-        <p><strong>Landmarks:</strong> seq={mLandmarkSeq ?? '-'} count={mLandmarkCount} rxPps={mReceivedPps}</p>
+        <p><strong>Harbor Status:</strong> {mStatus}</p>
         <p className="debug">{mDebug}</p>
         {mError && <p className="error">{mError}</p>}
       </section>
 
-      <section className="video-stage">
+      <section ref={mVideoStageRef} className={`video-stage${mIsFullscreen ? ' fullscreen' : ''}`}>
         <canvas ref={mCanvasRef} className="skeleton-canvas" />
+        <button className="fullscreen-toggle" onClick={handleToggleFullscreen} title={mIsFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+          {mIsFullscreen ? '❐' : '❐'}
+        </button>
+        <div className="rotation-controls">
+          <button onClick={handleRotateLeft} title="Rotate left">↺</button>
+          <button onClick={handleResetRotation} title="Reset rotation">⟲</button>
+          <button onClick={handleRotateRight} title="Rotate right">↻</button>
+        </div>
       </section>
     </main>
   )
