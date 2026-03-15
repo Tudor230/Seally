@@ -10,7 +10,7 @@ class NutritionFoodEntryRepository(context: Context) {
     private val mDao = AppDatabase.getInstance(context).nutritionFoodEntryDao()
 
     fun observeByDate(date: String): Flow<List<NutritionFoodEntryEntity>> = mDao.observeByDate(date)
-
+    suspend fun getByDate(date: String): List<NutritionFoodEntryEntity> = mDao.getByDate(date)
     suspend fun addEntry(
         date: String,
         name: String,
