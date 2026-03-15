@@ -71,9 +71,11 @@ import com.example.seally.nutrition.NutritionViewModel
 import com.example.seally.nutrition.MealRatingCategory
 import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.ProfileRoute
+import com.example.seally.seal.SealStateViewModel
 import com.example.seally.ui.theme.SeallyTheme
 
 private val mBottomNavIconSize = 28.dp
+private const val FALLBACK_SEAL_ASSET_PATH = "seals/muscles.png"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,6 +145,8 @@ class MainActivity : ComponentActivity() {
 fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     val context = LocalContext.current
     val nutritionViewModel: NutritionViewModel = viewModel()
+    val sealStateViewModel: SealStateViewModel = viewModel(factory = SealStateViewModel.Factory)
+    val mSealVisualState by sealStateViewModel.visualState.collectAsState()
 
     val pagerState = rememberPagerState(pageCount = { AppDestinations.entries.size })
     val coroutineScope = rememberCoroutineScope()
@@ -163,9 +167,15 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var profileStartingDestination by rememberSaveable { mutableStateOf(com.example.seally.profile.ProfileDestination.PROFILE) }
     val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
     var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
-    val singletonSealImageRequest = remember(context) {
+    val resolvedSealAssetPath = remember(context, mSealVisualState.mAssetPath) {
+        resolveSealAssetPathOrFallback(
+            availableAssets = context.assets.list("seals").orEmpty().toSet(),
+            requestedAssetPath = mSealVisualState.mAssetPath,
+        )
+    }
+    val singletonSealImageRequest = remember(context, resolvedSealAssetPath) {
         ImageRequest.Builder(context)
-            .data("file:///android_asset/seals/muscles.png")
+            .data("file:///android_asset/$resolvedSealAssetPath")
             .build()
     }
 
@@ -338,6 +348,18 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                 ratingCategory = nutritionViewModel.mLastAddedFoodRatingCategory
             )
         }
+    }
+}
+
+private fun resolveSealAssetPathOrFallback(
+    availableAssets: Set<String>,
+    requestedAssetPath: String,
+): String {
+    val requestedFileName = requestedAssetPath.substringAfterLast('/')
+    return if (requestedFileName in availableAssets) {
+        requestedAssetPath
+    } else {
+        FALLBACK_SEAL_ASSET_PATH
     }
 }
 

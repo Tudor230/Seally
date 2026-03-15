@@ -34,7 +34,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,7 +73,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-private val Application.nutritionDataStore by preferencesDataStore(name = "nutrition_state")
 private const val DEFAULT_CALORIE_TARGET = 2200
 private const val DEFAULT_WATER_TARGET_ML = 2500
 private const val DEFAULT_PROTEIN_TARGET = 140
@@ -1172,6 +1170,8 @@ private fun WaterTrackingPage(
     var showCustomDialog by remember { mutableStateOf(false) }
     var customAmountText by remember { mutableStateOf("") }
     var isRemoveMode by rememberSaveable { mutableStateOf(false) }
+    val customAmount = customAmountText.toIntOrNull()
+    val customAmountError = customAmountText.isNotBlank() && (customAmount == null || customAmount <= 0)
 
     if (showCustomDialog) {
         AlertDialog(
@@ -1187,19 +1187,26 @@ private fun WaterTrackingPage(
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                     ),
-                    singleLine = true
+                    singleLine = true,
+                    isError = customAmountError,
+                    supportingText = {
+                        if (customAmountError) {
+                            Text("Enter a value greater than 0 ml.")
+                        }
+                    },
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val amount = customAmountText.toIntOrNull() ?: 0
+                        val amount = customAmount ?: 0
                         if (amount > 0) {
                             if (isRemoveMode) onRemoveWater(amount) else onAddWater(amount)
                             showCustomDialog = false
                             customAmountText = ""
                         }
                     },
+                    enabled = customAmount != null && customAmount > 0,
                     shape = RoundedCornerShape(12.dp),
                     colors = if (isRemoveMode) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors()
                 ) {
@@ -1443,6 +1450,10 @@ private fun AddFoodSheet(
     var fibersText by rememberSaveable { mutableStateOf("") }
     var isLookupInProgress by rememberSaveable { mutableStateOf(false) }
     var lookupErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    val isNameBlank = name.isBlank()
+    val caloriesValue = caloriesText.toIntOrNull()
+    val caloriesError = caloriesText.isNotBlank() && (caloriesValue == null || caloriesValue <= 0)
+    val canAddFoodEntry = name.isNotBlank() && caloriesValue != null && caloriesValue > 0
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1471,7 +1482,13 @@ private fun AddFoodSheet(
                 placeholder = { Text("e.g. Scrambled Eggs") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                isError = isNameBlank,
+                supportingText = {
+                    if (isNameBlank) {
+                        Text("Food name is required.")
+                    }
+                },
             )
 
             Button(
@@ -1544,7 +1561,9 @@ private fun AddFoodSheet(
                     onValueChange = { caloriesText = it.filter(Char::isDigit) },
                     label = "Calories",
                     unit = "kcal",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    isError = caloriesError,
+                    errorText = "Required and must be > 0",
                 )
                 NutritionField(
                     value = proteinText,
@@ -1621,6 +1640,7 @@ private fun AddFoodSheet(
                     onAddFood(food)
                 },
                 modifier = Modifier.fillMaxWidth().height(60.dp),
+                enabled = canAddFoodEntry,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text("Add Food Entry", style = MaterialTheme.typography.titleMedium)
@@ -1635,7 +1655,9 @@ private fun NutritionField(
     onValueChange: (String) -> Unit,
     label: String,
     unit: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    errorText: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -1645,6 +1667,12 @@ private fun NutritionField(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         singleLine = true,
+        isError = isError,
+        supportingText = {
+            if (isError && !errorText.isNullOrBlank()) {
+                Text(errorText)
+            }
+        },
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
         )
