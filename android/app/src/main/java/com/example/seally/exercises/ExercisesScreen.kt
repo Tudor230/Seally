@@ -111,7 +111,7 @@ fun ExercisesScreen(
         .build()
 
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/homepage.png")
+        .data("file:///android_asset/backgrounds/gym.png")
         .build()
 
     Box(

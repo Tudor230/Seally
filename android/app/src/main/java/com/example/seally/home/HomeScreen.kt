@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,11 +42,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -134,18 +140,19 @@ fun HomeScreen(
             Spacer(modifier = Modifier.weight(1f))
         }
 
+        // --- Goal Gauge Row ---
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, top = 110.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 100.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            HomeGoalGaugeSlot(
+            HomeGoalButton(
                 goal = leftGoal,
                 onClick = { selectingSlot = HomeMetricSlot.Left },
             )
-            HomeGoalGaugeSlot(
+            HomeGoalButton(
                 goal = rightGoal,
                 onClick = { selectingSlot = HomeMetricSlot.Right },
             )
@@ -167,7 +174,7 @@ fun HomeScreen(
                 .padding(start = 24.dp, end = 24.dp, bottom = 52.dp)
                 .alpha(if (shouldShowMessage) 1f else 0f),
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
             tonalElevation = 1.dp,
         ) {
             Text(
@@ -203,51 +210,84 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeGoalGaugeSlot(
+private fun HomeGoalButton(
     goal: GoalUiModel?,
     onClick: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .size(68.4.dp)
-            .clickable(onClick = onClick),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-        tonalElevation = 2.dp,
-        shadowElevation = 1.dp,
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(100.dp)
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (goal == null) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Select metric",
-                    modifier = Modifier.size(28.5.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                val progress = goal.progress()
-                CircularProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.size(57.dp),
-                    strokeWidth = 6.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${(progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+        Surface(
+            modifier = Modifier
+                .size(84.dp)
+                .clickable(onClick = onClick),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            tonalElevation = 2.dp,
+            shadowElevation = 4.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (goal == null) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Select metric",
+                        modifier = Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                     )
-                    Text(
-                        text = goal.mMetric.mLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                } else {
+                    val progress = goal.progress()
+                    val goalColor = goal.mMetric.mAccentColor
+                    
+                    CircularProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        strokeWidth = 8.dp,
+                        color = goalColor,
+                        trackColor = goalColor.copy(alpha = 0.15f),
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                    
+                    Icon(
+                        imageVector = goal.mMetric.mIcon,
+                        contentDescription = null,
+                        tint = goalColor.copy(alpha = 0.8f),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
+        }
+        
+        if (goal != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                color = goal.mMetric.mAccentColor.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "${goal.mCurrentValue.toInt()} ${goal.mMetric.mUnit}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = goal.mMetric.mAccentColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = goal.mMetric.mLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Add Goal",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -261,37 +301,51 @@ private fun GoalPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select metric to track") },
+        title = { Text("Track on Home", fontWeight = FontWeight.Bold) },
         text = {
             if (goals.isEmpty()) {
-                Text("No goals available yet. Add goals from the Goals page first.")
+                Text("No active goals found. Create some in the Goals tab first!")
             } else {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(240.dp)
+                        .heightIn(max = 300.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     goals.forEach { goal ->
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onGoalSelected(goal) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = goal.mMetric.mAccentColor.copy(alpha = 0.1f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, goal.mMetric.mAccentColor.copy(alpha = 0.2f))
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = goal.mMetric.mLabel,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = goal.mMetric.mIcon,
+                                    contentDescription = null,
+                                    tint = goal.mMetric.mAccentColor,
+                                    modifier = Modifier.size(24.dp)
                                 )
-                                Text(
-                                    text = "${goal.mCurrentValue.toInt()} / ${goal.mTargetValue.toInt()} ${goal.mMetric.mUnit}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        text = goal.mMetric.mLabel,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = goal.mMetric.mAccentColor
+                                    )
+                                    Text(
+                                        text = "${goal.mCurrentValue.toInt()} / ${goal.mTargetValue.toInt()} ${goal.mMetric.mUnit}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -299,15 +353,15 @@ private fun GoalPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            Button(onClick = onDismiss, shape = RoundedCornerShape(12.dp)) {
                 Text("Close")
             }
         },
         dismissButton = {
             TextButton(onClick = onClearSelection) {
-                Text("Clear")
+                Text("Clear Slot", color = MaterialTheme.colorScheme.error)
             }
         },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
     )
 }

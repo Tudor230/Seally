@@ -193,9 +193,17 @@ fun NutritionScreen(
     var foodPendingDeletion by remember { mutableStateOf<FoodEntry?>(null) }
 
     val context = LocalContext.current
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/homepage.png")
-        .build()
+    val mBackgroundAssetPath = when (currentPage) {
+        NutritionPage.Kitchen -> "backgrounds/kitchen.png"
+        NutritionPage.Food -> "backgrounds/food_track.png"
+        NutritionPage.Water -> "backgrounds/water_trackpng.png"
+        NutritionPage.Camera -> "backgrounds/form_validator.png"
+    }
+    val backgroundRequest = remember(context, mBackgroundAssetPath) {
+        ImageRequest.Builder(context)
+            .data("file:///android_asset/$mBackgroundAssetPath")
+            .build()
+    }
     val musclesImageRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/seals/muscles.png")
         .build()

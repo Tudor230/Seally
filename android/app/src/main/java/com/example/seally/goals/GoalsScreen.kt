@@ -178,7 +178,7 @@ fun GoalsScreen(
 
     val context = LocalContext.current
     val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/backgrounds/homepage.png")
+        .data("file:///android_asset/backgrounds/goals.png")
         .build()
 
     Box(

@@ -22,12 +22,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -57,19 +61,37 @@ fun CalendarScreen(
     val currentMonth = remember(pagerState.currentPage) {
         startMonth.plusMonths((pagerState.currentPage - startPage).toLong())
     }
+    val context = LocalContext.current
+    val backgroundRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data("file:///android_asset/backgrounds/calendar.png")
+            .build()
+    }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        modifier = modifier.fillMaxSize()
+    ) {
+        AsyncImage(
+            model = backgroundRequest,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = 0.72f,
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        )
                     )
                 )
-            )
-    ) {
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
