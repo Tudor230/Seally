@@ -50,8 +50,11 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.example.seally.data.local.entity.NutritionFoodEntryEntity
+import com.example.seally.data.local.entity.NutritionLogEntity
+import com.example.seally.data.repository.DailyGoalProgressRepository
 import com.example.seally.data.repository.NutritionFoodEntryRepository
 import com.example.seally.data.repository.NutritionLogRepository
+import com.example.seally.data.repository.TargetRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Job
@@ -106,7 +109,11 @@ data class FoodEntry(
 class NutritionViewModel(application: Application) : AndroidViewModel(application) {
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
+    private val mTargetRepository = TargetRepository(application)
+    private val mDailyGoalProgressRepository = DailyGoalProgressRepository(application)
     private val mCurrentDate: String = LocalDate.now().toString()
+    private var mPersistedFoodEntries: List<NutritionFoodEntryEntity> = emptyList()
+    private var mPersistedWaterMl: Int = 0
 
     var mCurrentPage by mutableStateOf(NutritionPage.Kitchen)
         private set
@@ -215,12 +222,66 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             mNutritionLogRepository.observeByDate(mCurrentDate).collectLatest { log ->
                 mWaterConsumedMl = log?.waterMl ?: 0
+                mPersistedWaterMl = mWaterConsumedMl
+                syncNutritionGoalsProgress()
             }
         }
         viewModelScope.launch {
             mNutritionFoodEntryRepository.observeByDate(mCurrentDate).collectLatest { entries ->
+                mPersistedFoodEntries = entries
                 mFoods.clear()
                 mFoods.addAll(entries.map { it.toFoodEntry() })
+                syncNutritionLogFromFoodEntries()
+                syncNutritionGoalsProgress()
+            }
+        }
+    }
+
+    private suspend fun syncNutritionLogFromFoodEntries() {
+        val mExisting = mNutritionLogRepository.getByDate(mCurrentDate)
+        val mWaterMl = mExisting?.waterMl ?: mPersistedWaterMl
+        mNutritionLogRepository.upsert(
+            NutritionLogEntity(
+                date = mCurrentDate,
+                waterMl = mWaterMl.coerceAtLeast(0),
+                caloriesKcal = mPersistedFoodEntries.sumOf { it.calories },
+                proteinG = mPersistedFoodEntries.sumOf { it.protein }.toDouble(),
+                carbsG = mPersistedFoodEntries.sumOf { it.carbs }.toDouble(),
+                fatsG = mPersistedFoodEntries.sumOf { it.fats }.toDouble(),
+                sugarG = mPersistedFoodEntries.sumOf { it.sugars }.toDouble(),
+                fiberG = mPersistedFoodEntries.sumOf { it.fibers }.toDouble(),
+            ),
+        )
+    }
+
+    private fun syncNutritionGoalsProgress() {
+        viewModelScope.launch {
+            val calories = mPersistedFoodEntries.sumOf { it.calories }.toDouble()
+            val protein = mPersistedFoodEntries.sumOf { it.protein }.toDouble()
+            val carbs = mPersistedFoodEntries.sumOf { it.carbs }.toDouble()
+            val fats = mPersistedFoodEntries.sumOf { it.fats }.toDouble()
+            val sugars = mPersistedFoodEntries.sumOf { it.sugars }.toDouble()
+            val fibers = mPersistedFoodEntries.sumOf { it.fibers }.toDouble()
+            val water = mPersistedWaterMl.coerceAtLeast(0).toDouble()
+
+            val goalProgressByName = mapOf(
+                "WATER" to water,
+                "CALORIES" to calories,
+                "PROTEIN" to protein,
+                "CARBS" to carbs,
+                "FATS" to fats,
+                "SUGARS" to sugars,
+                "FIBERS" to fibers,
+            )
+
+            goalProgressByName.forEach { (goalName, progressValue) ->
+                if (mTargetRepository.getByGoalName(goalName) != null) {
+                    mDailyGoalProgressRepository.setProgress(
+                        goalName = goalName,
+                        date = mCurrentDate,
+                        progressValue = progressValue,
+                    )
+                }
             }
         }
     }
