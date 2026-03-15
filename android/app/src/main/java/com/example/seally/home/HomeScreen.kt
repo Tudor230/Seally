@@ -1,5 +1,6 @@
 package com.example.seally.home
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +66,10 @@ private enum class HomeMetricSlot {
     Right,
 }
 
+private const val HOME_PREFS_NAME = "home_goal_slots"
+private const val HOME_LEFT_GOAL_ID_KEY = "left_goal_id"
+private const val HOME_RIGHT_GOAL_ID_KEY = "right_goal_id"
+
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
@@ -72,11 +77,20 @@ fun HomeScreen(
     onSettingsClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences(HOME_PREFS_NAME, Context.MODE_PRIVATE) }
     val goalsViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val trackedGoals by goalsViewModel.mGoals.collectAsState()
 
-    var leftGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var rightGoalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var leftGoalId by rememberSaveable {
+        mutableStateOf(
+            if (prefs.contains(HOME_LEFT_GOAL_ID_KEY)) prefs.getLong(HOME_LEFT_GOAL_ID_KEY, 0L) else null,
+        )
+    }
+    var rightGoalId by rememberSaveable {
+        mutableStateOf(
+            if (prefs.contains(HOME_RIGHT_GOAL_ID_KEY)) prefs.getLong(HOME_RIGHT_GOAL_ID_KEY, 0L) else null,
+        )
+    }
     var selectingSlot by remember { mutableStateOf<HomeMetricSlot?>(null) }
 
     val motivationalMessages = remember {
@@ -97,9 +111,11 @@ fun HomeScreen(
     LaunchedEffect(trackedGoals) {
         if (leftGoalId != null && leftGoal == null) {
             leftGoalId = null
+            prefs.edit().remove(HOME_LEFT_GOAL_ID_KEY).apply()
         }
         if (rightGoalId != null && rightGoal == null) {
             rightGoalId = null
+            prefs.edit().remove(HOME_RIGHT_GOAL_ID_KEY).apply()
         }
     }
 
@@ -184,15 +200,27 @@ fun HomeScreen(
             onDismiss = { selectingSlot = null },
             onGoalSelected = { goal ->
                 when (slot) {
-                    HomeMetricSlot.Left -> leftGoalId = goal.mId
-                    HomeMetricSlot.Right -> rightGoalId = goal.mId
+                    HomeMetricSlot.Left -> {
+                        leftGoalId = goal.mId
+                        prefs.edit().putLong(HOME_LEFT_GOAL_ID_KEY, goal.mId).apply()
+                    }
+                    HomeMetricSlot.Right -> {
+                        rightGoalId = goal.mId
+                        prefs.edit().putLong(HOME_RIGHT_GOAL_ID_KEY, goal.mId).apply()
+                    }
                 }
                 selectingSlot = null
             },
             onClearSelection = {
                 when (slot) {
-                    HomeMetricSlot.Left -> leftGoalId = null
-                    HomeMetricSlot.Right -> rightGoalId = null
+                    HomeMetricSlot.Left -> {
+                        leftGoalId = null
+                        prefs.edit().remove(HOME_LEFT_GOAL_ID_KEY).apply()
+                    }
+                    HomeMetricSlot.Right -> {
+                        rightGoalId = null
+                        prefs.edit().remove(HOME_RIGHT_GOAL_ID_KEY).apply()
+                    }
                 }
                 selectingSlot = null
             },

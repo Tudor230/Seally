@@ -17,6 +17,7 @@ class ExerciseLogRepository(context: Context) {
 
     suspend fun getRecent(limit: Int = 50): List<ExerciseLogEntity> = mDao.getRecent(limit)
     suspend fun deleteByDate(date: String) = mDao.deleteByDate(date)
+    suspend fun deleteById(id: String) = mDao.deleteById(id)
 
     suspend fun addLog(
         exerciseName: String,

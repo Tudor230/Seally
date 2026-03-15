@@ -27,6 +27,9 @@ interface ExerciseLogDao {
     @Query("DELETE FROM exercise_log WHERE date = :date")
     suspend fun deleteByDate(date: String)
 
+    @Query("DELETE FROM exercise_log WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: ExerciseLogEntity)
 }

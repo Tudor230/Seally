@@ -1114,13 +1114,7 @@ private fun GoalMetric.calculateProgress(
 
     return when (mGoalDirection) {
         GoalDirection.AT_LEAST -> (currentValue / targetValue).coerceIn(0f, 1f)
-        GoalDirection.AT_MOST -> {
-            if (currentValue <= targetValue) {
-                (currentValue / targetValue).coerceIn(0f, 1f)
-            } else {
-                (targetValue / currentValue).coerceIn(0f, 1f)
-            }
-        }
+        GoalDirection.AT_MOST -> (currentValue / targetValue).coerceIn(0f, 1f)
     }
 }
 
