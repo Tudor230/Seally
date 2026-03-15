@@ -1063,8 +1063,7 @@ private fun CameraTrackingPage(
 
     NutritionLabelScannerPage(
         modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+            .fillMaxSize(),
         onBack = onBack,
         onScanResult = { scanResult -> mScannedResult = scanResult },
     )
