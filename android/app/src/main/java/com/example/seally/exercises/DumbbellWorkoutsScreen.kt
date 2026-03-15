@@ -99,6 +99,12 @@ fun DumbbellWorkoutsScreen(
                     color = Color(0xFF63B95B),
                     onClick = { onExerciseSelected(ExerciseType.PULLUP) }
                 )
+                WorkoutPlanCard(
+                    title = "Push-up",
+                    details = "Depth and body-line feedback checker",
+                    color = Color(0xFF6E56CF),
+                    onClick = { onExerciseSelected(ExerciseType.PUSHUP) }
+                )
                 
                 Spacer(modifier = Modifier.height(100.dp))
             }

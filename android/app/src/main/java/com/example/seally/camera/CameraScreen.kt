@@ -163,9 +163,7 @@ fun CameraScreen(
         mHasShownEntryGuide = true
     }
 
-    val mMessageToAnnounce = uiState.mErrorMessage
-        ?: uiState.mFormFeedback.mErrorMessage
-        ?: uiState.mFormFeedback.mSpeechCue
+    val mMessageToAnnounce = uiState.mErrorMessage ?: uiState.mFormFeedback.mSpeechCue
     val mErrorSpeechAnnouncer = remember(context) { ErrorSpeechAnnouncer(context) }
 
     LaunchedEffect(mMessageToAnnounce) {
@@ -322,6 +320,7 @@ private fun createExerciseGuideIntent(
         ExerciseType.SQUAT -> SquatGuideActivity::class.java
         ExerciseType.PLANK -> PlankGuideActivity::class.java
         ExerciseType.PULLUP -> PullupGuideActivity::class.java
+        ExerciseType.PUSHUP -> PushupGuideActivity::class.java
     }
     return Intent(context, activityClass)
 }
@@ -336,6 +335,7 @@ private fun FeedbackPanel(
         ExerciseType.SQUAT -> "Squat"
         ExerciseType.PLANK -> "Plank"
         ExerciseType.PULLUP -> "Pullup"
+        ExerciseType.PUSHUP -> "Push-up"
     }
     val statusText = when (feedback.mStatus) {
         ExerciseStatus.INITIALIZING -> "Initializing"
@@ -355,12 +355,24 @@ private fun FeedbackPanel(
                 append(feedback.mRepCount)
                 append(" • Phase: ")
                 append(feedback.mCurrentPhase.name.lowercase().replaceFirstChar { it.titlecase() })
+                feedback.mDebugKneeAngleDeg?.let { currentKneeAngle ->
+                    append(" • Knee: ")
+                    append(String.format(Locale.US, "%.1f°", currentKneeAngle))
+                }
+                feedback.mDebugMinKneeAngleDeg?.let { minKneeAngle ->
+                    append(" • Min knee: ")
+                    append(String.format(Locale.US, "%.1f°", minKneeAngle))
+                }
             }
             ExerciseType.PLANK -> {
                 append(" • Timer: ")
                 append(formatDuration(feedback.mHoldDurationMs))
             }
             ExerciseType.PULLUP -> {
+                append(" • Reps: ")
+                append(feedback.mRepCount)
+            }
+            ExerciseType.PUSHUP -> {
                 append(" • Reps: ")
                 append(feedback.mRepCount)
             }

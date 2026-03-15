@@ -11,6 +11,7 @@ object LandmarkPacketEncoder {
     private const val mHeaderBytes: Int = 16
     private const val mBytesPerLandmark: Int = 6
     private const val mFrontCameraFlag: Byte = 0x01
+    private const val mProblematicJointsFlag: Byte = 0x02
 
     fun encode(
         sequence: Long,
@@ -19,13 +20,28 @@ object LandmarkPacketEncoder {
         frameHeight: Int,
         isFrontCamera: Boolean,
         landmarks: List<NormalizedLandmark>,
+        problematicJoints: List<Int> = emptyList(),
     ): ByteArray {
+        val hasProblematicJoints = problematicJoints.isNotEmpty()
         val landmarkCount = landmarks.size.coerceIn(0, UShort.MAX_VALUE.toInt())
-        val payload = ByteBuffer.allocate(mHeaderBytes + landmarkCount * mBytesPerLandmark)
+        val problematicBitmask = if (hasProblematicJoints) {
+            problematicJoints.fold(0) { mask, jointIndex ->
+                mask or (1 shl (jointIndex and 0x1F))
+            }
+        } else {
+            0
+        }
+
+        val extraBytes = if (hasProblematicJoints) 4 else 0
+        val payload = ByteBuffer.allocate(mHeaderBytes + landmarkCount * mBytesPerLandmark + extraBytes)
             .order(ByteOrder.LITTLE_ENDIAN)
 
+        var flags = 0
+        if (isFrontCamera) flags = flags or mFrontCameraFlag.toInt()
+        if (hasProblematicJoints) flags = flags or mProblematicJointsFlag.toInt()
+
         payload.put(mPacketVersion)
-        payload.put(if (isFrontCamera) mFrontCameraFlag else 0)
+        payload.put(flags.toByte())
         payload.putShort(landmarkCount.toShort())
         payload.putInt(sequence.toInt())
         payload.putInt(timestampMs.toInt())
@@ -37,6 +53,10 @@ object LandmarkPacketEncoder {
             payload.putShort(quantizeCoordinate(landmark.x()))
             payload.putShort(quantizeCoordinate(landmark.y()))
             payload.putShort(quantizeCoordinate(landmark.z()))
+        }
+
+        if (hasProblematicJoints) {
+            payload.putInt(problematicBitmask)
         }
 
         return payload.array()

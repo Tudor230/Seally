@@ -1,5 +1,6 @@
 package com.example.seally.nutrition
 
+import android.app.Application
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.activity.compose.BackHandler
@@ -42,17 +43,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.example.seally.data.local.entity.NutritionFoodEntryEntity
+import com.example.seally.data.repository.NutritionFoodEntryRepository
+import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 enum class NutritionPage {
@@ -85,6 +91,7 @@ private data class ScannedQuantity(
 )
 
 data class FoodEntry(
+    val id: String = "",
     val name: String,
     val meal: MealType,
     val calories: Int,
@@ -96,7 +103,11 @@ data class FoodEntry(
     val isHealthy: Boolean,
 )
 
-class NutritionViewModel : ViewModel() {
+class NutritionViewModel(application: Application) : AndroidViewModel(application) {
+    private val mNutritionLogRepository = NutritionLogRepository(application)
+    private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
+    private val mCurrentDate: String = LocalDate.now().toString()
+
     var mCurrentPage by mutableStateOf(NutritionPage.Kitchen)
         private set
 
@@ -109,6 +120,10 @@ class NutritionViewModel : ViewModel() {
     val mFoods = mutableStateListOf<FoodEntry>()
 
     private var mSealCelebrationJob: Job? = null
+
+    init {
+        observePersistedNutrition()
+    }
 
     fun openFoodPage() {
         mCurrentPage = NutritionPage.Food
@@ -123,26 +138,58 @@ class NutritionViewModel : ViewModel() {
     }
 
     fun addManualFood(foodEntry: FoodEntry) {
-        mFoods.add(foodEntry)
-        triggerSealCelebration()
+        viewModelScope.launch {
+            mNutritionFoodEntryRepository.addEntry(
+                date = mCurrentDate,
+                name = foodEntry.name,
+                meal = foodEntry.meal.name,
+                calories = foodEntry.calories,
+                protein = foodEntry.protein,
+                carbs = foodEntry.carbs,
+                fats = foodEntry.fats,
+                sugars = foodEntry.sugars,
+                fibers = foodEntry.fibers,
+                isHealthy = foodEntry.isHealthy,
+            )
+            triggerSealCelebration()
+        }
     }
 
     fun addScannedFood(foodEntry: FoodEntry) {
-        mFoods.add(foodEntry)
-        triggerSealCelebration()
-        mCurrentPage = NutritionPage.Food
+        viewModelScope.launch {
+            mNutritionFoodEntryRepository.addEntry(
+                date = mCurrentDate,
+                name = foodEntry.name,
+                meal = foodEntry.meal.name,
+                calories = foodEntry.calories,
+                protein = foodEntry.protein,
+                carbs = foodEntry.carbs,
+                fats = foodEntry.fats,
+                sugars = foodEntry.sugars,
+                fibers = foodEntry.fibers,
+                isHealthy = foodEntry.isHealthy,
+            )
+            triggerSealCelebration()
+            mCurrentPage = NutritionPage.Food
+        }
     }
 
     fun addWater(addedAmount: Int) {
-        mWaterConsumedMl += addedAmount
+        viewModelScope.launch {
+            mNutritionLogRepository.addWater(mCurrentDate, addedAmount)
+        }
     }
 
     fun removeFood(foodEntry: FoodEntry) {
-        mFoods.remove(foodEntry)
+        viewModelScope.launch {
+            mNutritionFoodEntryRepository.removeEntry(foodEntry.id)
+        }
     }
 
     fun removeWater(removedAmount: Int) {
-        mWaterConsumedMl = (mWaterConsumedMl - removedAmount).coerceAtLeast(0)
+        viewModelScope.launch {
+            mNutritionLogRepository.addWater(mCurrentDate, -removedAmount)
+        }
     }
 
     fun canNavigateBackInNutrition(): Boolean = mCurrentPage != NutritionPage.Kitchen
@@ -163,6 +210,36 @@ class NutritionViewModel : ViewModel() {
             mShouldShowSealCelebration = false
         }
     }
+
+    private fun observePersistedNutrition() {
+        viewModelScope.launch {
+            mNutritionLogRepository.observeByDate(mCurrentDate).collectLatest { log ->
+                mWaterConsumedMl = log?.waterMl ?: 0
+            }
+        }
+        viewModelScope.launch {
+            mNutritionFoodEntryRepository.observeByDate(mCurrentDate).collectLatest { entries ->
+                mFoods.clear()
+                mFoods.addAll(entries.map { it.toFoodEntry() })
+            }
+        }
+    }
+}
+
+private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
+    val parsedMeal = runCatching { MealType.valueOf(meal) }.getOrDefault(MealType.Breakfast)
+    return FoodEntry(
+        id = id,
+        name = name,
+        meal = parsedMeal,
+        calories = calories,
+        protein = protein,
+        carbs = carbs,
+        fats = fats,
+        sugars = sugars,
+        fibers = fibers,
+        isHealthy = isHealthy,
+    )
 }
 
 @Composable
