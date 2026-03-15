@@ -1,5 +1,6 @@
 package com.example.seally.exercises
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,12 +19,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.seally.camera.ExerciseType
+import com.example.seally.ui.components.AppScreenBackground
 
 @Composable
 fun DumbbellWorkoutsScreen(
@@ -32,17 +33,10 @@ fun DumbbellWorkoutsScreen(
     onExerciseSelected: (ExerciseType) -> Unit = {},
 ) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    )
-                )
-            )
+        modifier = modifier.fillMaxSize()
     ) {
+        AppScreenBackground(assetPath = "backgrounds/form_validator.png")
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -51,14 +45,19 @@ fun DumbbellWorkoutsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
                     onClick = onBackClick,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), CircleShape)
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
@@ -126,8 +125,9 @@ private fun WorkoutPlanCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

@@ -20,7 +20,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.seally.data.local.entity.ExerciseLogEntity
 import com.example.seally.data.repository.ExerciseLogRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.ui.components.AppScreenBackground
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -83,7 +84,7 @@ fun CalendarScreen(
         mExerciseLogs.toWorkoutMap(mExerciseCatalog)
     }
     var isEntryDialogOpen by rememberSaveable { mutableStateOf(false) }
-    val draftExercises = remember { mutableStateListOf<ExerciseEntry>() }
+    val draftExercises = remember { mutableStateListOf<WorkoutEntry>() }
 
     val pageCount = 1200
     val startPage = pageCount / 2
@@ -96,17 +97,10 @@ fun CalendarScreen(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    )
-                )
-            )
+        modifier = modifier.fillMaxSize()
     ) {
+        AppScreenBackground(assetPath = "backgrounds/calendar.png")
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -116,6 +110,7 @@ fun CalendarScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -123,9 +118,13 @@ fun CalendarScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onBackClick,
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), CircleShape)
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
@@ -222,7 +221,7 @@ fun CalendarScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.surface,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ) {
                     Box(contentAlignment = Alignment.Center) {

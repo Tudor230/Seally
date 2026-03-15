@@ -2,7 +2,6 @@ package com.example.seally.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -51,16 +50,16 @@ fun TopHeader(
         ) {
             Surface(
                 onClick = onProfileClick,
-                shape = CircleShape,
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp
+                color = Color.Transparent,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
             ) {
                 AsyncImage(
                     model = profilePictureRequest,
                     contentDescription = "Profile",
                     modifier = Modifier
-                        .size(40.dp) // Slightly smaller profile pic to fit tighter
-                        .clip(CircleShape),
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(26.dp)),
                     contentScale = ContentScale.Crop,
                 )
             }
@@ -107,14 +106,19 @@ fun TopHeader(
                 )
             }
 
-            IconButton(
+            Surface(
                 onClick = onSettingsClick,
-                modifier = Modifier.size(36.dp)
+                color = Color.Transparent,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
             ) {
                 AsyncImage(
                     model = settingsImageRequest,
                     contentDescription = "Settings",
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(26.dp)),
+                    contentScale = ContentScale.Crop,
                 )
             }
         }

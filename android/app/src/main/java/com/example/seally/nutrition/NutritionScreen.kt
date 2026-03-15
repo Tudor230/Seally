@@ -52,6 +52,7 @@ import coil.request.ImageRequest
 import com.example.seally.data.local.entity.NutritionFoodEntryEntity
 import com.example.seally.data.repository.NutritionFoodEntryRepository
 import com.example.seally.data.repository.NutritionLogRepository
+import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -245,6 +246,7 @@ private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
 fun NutritionScreen(
     modifier: Modifier = Modifier,
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
+    onProfileClick: () -> Unit = {},
     mViewModel: NutritionViewModel = viewModel(),
 ) {
     val calorieTarget = 2200
@@ -269,11 +271,14 @@ fun NutritionScreen(
     var foodPendingDeletion by remember { mutableStateOf<FoodEntry?>(null) }
 
     val context = LocalContext.current
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/homepage.png")
-        .build()
+    val mBackgroundAssetPath = when (currentPage) {
+        NutritionPage.Kitchen -> "backgrounds/kitchen.png"
+        NutritionPage.Food -> "backgrounds/food_track.png"
+        NutritionPage.Water -> "backgrounds/water_trackpng.png"
+        NutritionPage.Camera -> "backgrounds/form_validator.png"
+    }
     val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/muscles.png")
+        .data("file:///android_asset/seals/muscles.png")
         .build()
 
     BackHandler(
@@ -314,18 +319,11 @@ fun NutritionScreen(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // --- Background Image with Transparency ---
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.7f
-        )
+        AppScreenBackground(assetPath = mBackgroundAssetPath)
 
         Column(modifier = Modifier.fillMaxSize()) {
             if (currentPage == NutritionPage.Kitchen) {
-                TopHeader()
+                TopHeader(onProfileClick = onProfileClick)
             }
 
             Box(modifier = Modifier.weight(1f)) {
@@ -479,7 +477,7 @@ private fun StatCard(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
         shadowElevation = 1.dp
     ) {
@@ -560,13 +558,15 @@ private fun FoodTrackingPage(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
@@ -664,7 +664,7 @@ private fun MacroOverviewPanel(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
         shadowElevation = 1.dp
     ) {
@@ -793,7 +793,7 @@ private fun MealCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shadowElevation = 1.dp
     ) {
@@ -829,8 +829,15 @@ private fun MealCard(
                         )
                     }
                 }
-                IconButton(onClick = onAddClick) {
-                    Icon(Icons.Default.Add, contentDescription = "Add to ${mealType.label}")
+                IconButton(
+                    onClick = onAddClick,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add to ${mealType.label}",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                 }
             }
 
@@ -893,7 +900,7 @@ private fun WaterTrackingPage(
 ) {
     val context = LocalContext.current
     val waterSvgRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/water_glass_icon.svg")
+        .data("file:///android_asset/icons/water_glass.svg")
         .decoderFactory(SvgDecoder.Factory())
         .build()
 
@@ -953,15 +960,17 @@ private fun WaterTrackingPage(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape)) {
+                IconButton(onClick = onBack, modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
@@ -1042,7 +1051,7 @@ private fun WaterTrackingPage(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 2.dp,
             shadowElevation = 2.dp
         ) {
@@ -1130,7 +1139,8 @@ private fun CameraTrackingPage(
     var mScannedResult by remember { mutableStateOf<NutritionLabelScanResult?>(null) }
 
     NutritionLabelScannerPage(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize(),
         onBack = onBack,
         onScanResult = { scanResult -> mScannedResult = scanResult },
     )
