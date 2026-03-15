@@ -1353,6 +1353,8 @@ private fun AddFoodSheet(
     onAddFood: (FoodEntry) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val mCoroutineScope = rememberCoroutineScope()
+    val mFoodLookupApiClient = remember { NutritionFoodLookupApiClient() }
     
     var selectedMeal by rememberSaveable { mutableStateOf(initialMealType ?: MealType.Breakfast) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -1362,6 +1364,8 @@ private fun AddFoodSheet(
     var fatsText by rememberSaveable { mutableStateOf("") }
     var sugarsText by rememberSaveable { mutableStateOf("") }
     var fibersText by rememberSaveable { mutableStateOf("") }
+    var isLookupInProgress by rememberSaveable { mutableStateOf(false) }
+    var lookupErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1392,6 +1396,54 @@ private fun AddFoodSheet(
                 shape = RoundedCornerShape(16.dp),
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
             )
+
+            Button(
+                onClick = {
+                    lookupErrorMessage = null
+                    isLookupInProgress = true
+                    mCoroutineScope.launch {
+                        try {
+                            val lookupResult = mFoodLookupApiClient.lookupByName(name)
+                            caloriesText = lookupResult.calories.toString()
+                            proteinText = lookupResult.protein.toString()
+                            carbsText = lookupResult.carbs.toString()
+                            fatsText = lookupResult.fats.toString()
+                            sugarsText = lookupResult.sugars.toString()
+                            fibersText = lookupResult.fibers.toString()
+                        } catch (error: IllegalStateException) {
+                            lookupErrorMessage = error.message ?: "Failed to lookup nutrition values."
+                        } catch (error: java.io.IOException) {
+                            lookupErrorMessage = "Could not reach nutrition lookup service."
+                        } catch (error: org.json.JSONException) {
+                            lookupErrorMessage = "Received malformed nutrition data from server."
+                        } finally {
+                            isLookupInProgress = false
+                        }
+                    }
+                },
+                enabled = name.isNotBlank() && !isLookupInProgress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                if (isLookupInProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("Autocomplete nutrition values")
+                }
+            }
+
+            lookupErrorMessage?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
 
             if (initialMealType == null) {
                 Column {
