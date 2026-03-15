@@ -13,8 +13,8 @@ class ProfileViewModel(
     private val repository: ProfileRepository,
 ) : ViewModel() {
 
-    val profile: StateFlow<UserProfile> = repository.profile
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserProfile())
+    val profile: StateFlow<UserProfile?> = repository.profile
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun save(profile: UserProfile) {
         viewModelScope.launch {

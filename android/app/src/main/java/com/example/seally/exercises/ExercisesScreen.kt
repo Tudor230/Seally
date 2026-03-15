@@ -42,6 +42,7 @@ fun ExercisesScreen(
     onRightActionClick: () -> Unit = {},
     onDetailVisibilityChanged: (Boolean) -> Unit = {},
     onProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
 ) {
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
@@ -126,7 +127,10 @@ fun ExercisesScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            TopHeader(onProfileClick = onProfileClick)
+            TopHeader(
+                onProfileClick = onProfileClick,
+                onSettingsClick = onSettingsClick,
+            )
 
             Surface(
                 modifier = Modifier

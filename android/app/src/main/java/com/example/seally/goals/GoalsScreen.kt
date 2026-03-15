@@ -232,6 +232,7 @@ data class GoalUiModel(
 fun GoalsScreen(
     modifier: Modifier = Modifier,
     onProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
 ) {
     val mViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val mGoals by mViewModel.mGoals.collectAsState()
@@ -249,7 +250,10 @@ fun GoalsScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            TopHeader(onProfileClick = onProfileClick)
+            TopHeader(
+                onProfileClick = onProfileClick,
+                onSettingsClick = onSettingsClick,
+            )
 
             Column(
                 modifier = Modifier
