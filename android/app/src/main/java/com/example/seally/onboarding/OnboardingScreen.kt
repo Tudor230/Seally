@@ -98,12 +98,19 @@ fun OnboardingScreen(
     val mAgeValue = mAge.toIntOrNull()
     val mWaterTargetValue = mWaterTargetMl.toIntOrNull()
 
+    val mNameError = mName.isBlank()
+    val mWeightError = mWeightKg.isNotBlank() &&
+        (mWeightValue == null || mWeightValue !in 20f..400f)
+    val mHeightError = mHeightCm.isNotBlank() &&
+        (mHeightValue == null || mHeightValue !in 50..260)
     val mDesiredWeightError = mDesiredWeightKg.isNotBlank() && 
         (mDesiredWeightValue == null || mDesiredWeightValue !in 20f..400f)
+    val mAgeError = mAge.isNotBlank() && (mAgeValue == null || mAgeValue !in 10..120)
+    val mGenderError = mGender.isBlank()
 
-    val mCanMoveFromProfile = mName.isNotBlank() &&
-            mWeightValue != null && mWeightValue in 20f..400f &&
-            mHeightValue != null && mHeightValue > 0 &&
+    val mCanMoveFromProfile = !mNameError &&
+            !mWeightError && mWeightValue != null &&
+            !mHeightError && mHeightValue != null &&
             mDesiredWeightValue != null && mDesiredWeightValue in 20f..400f &&
             !mDesiredWeightError
 
@@ -127,8 +134,8 @@ fun OnboardingScreen(
                             LinearProgressBar(
                                 progress = mProgress,
                                 modifier = Modifier.width(200.dp),
-                                filledColor = Color(0xFF00E5FF),
-                                trackColor = Color.White.copy(alpha = 0.2f),
+                                filledColor = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                 height = 8.dp
                             )
                         },
@@ -142,7 +149,7 @@ fun OnboardingScreen(
                                     else -> mStep
                                 }
                             }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                             }
                         },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
@@ -178,6 +185,9 @@ fun OnboardingScreen(
                             mHeightCm, { mHeightCm = it.filterNumeric(3) },
                             mDesiredWeightKg, { mDesiredWeightKg = it.filterDecimal(6) },
                             mCanMoveFromProfile,
+                            mNameError,
+                            mWeightError,
+                            mHeightError,
                             mDesiredWeightError
                         ) { mStep = OnboardingStep.ACTIVITY }
 
@@ -188,7 +198,9 @@ fun OnboardingScreen(
                         OnboardingStep.DEMOGRAPHICS -> DemographicsStep(
                             mAge, { mAge = it.filterNumeric(3) },
                             mGender, { mGender = it },
-                            mAgeValue != null && mAgeValue in 10..120 && mGender.isNotBlank()
+                            !mAgeError && mAgeValue != null && !mGenderError,
+                            mAgeError = mAgeError,
+                            mGenderError = mGenderError,
                         ) { mStep = OnboardingStep.SUMMARY }
 
                         OnboardingStep.SUMMARY -> SummaryStep(
@@ -253,7 +265,7 @@ private fun WelcomeStep(onNext: () -> Unit) {
     ) {
         Surface(
             modifier = Modifier.size(120.dp),
-            color = Color(0xFF00E5FF).copy(alpha = 0.2f),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
             shape = CircleShape
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -264,7 +276,7 @@ private fun WelcomeStep(onNext: () -> Unit) {
         Text(
             text = "Welcome to Seally",
             style = MaterialTheme.typography.displaySmall,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Black,
             textAlign = TextAlign.Center
         )
@@ -272,7 +284,7 @@ private fun WelcomeStep(onNext: () -> Unit) {
         Text(
             text = "Your personalized AI fitness companion. Let's get you set up for success.",
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 20.dp)
         )
@@ -290,28 +302,42 @@ private fun ProfileStep(
     height: String, onHeightChange: (String) -> Unit,
     goalWeight: String, onGoalWeightChange: (String) -> Unit,
     canMove: Boolean,
+    nameError: Boolean = false,
+    weightError: Boolean = false,
+    heightError: Boolean = false,
     goalWeightError: Boolean = false,
     onNext: () -> Unit
 ) {
     OnboardingCard(title = "Tell us about yourself") {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OnboardingTextField(value = name, onValueChange = onNameChange, label = "Full Name")
+            OnboardingTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = "Full Name",
+                isError = nameError,
+                errorMessage = "Name is required",
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OnboardingTextField(
                     value = weight, onValueChange = onWeightChange,
                     label = "Weight (kg)", modifier = Modifier.weight(1f),
-                    keyboardType = KeyboardType.Decimal
+                    keyboardType = KeyboardType.Decimal,
+                    isError = weightError,
+                    errorMessage = "20–400 kg",
                 )
                 OnboardingTextField(
                     value = height, onValueChange = onHeightChange,
                     label = "Height (cm)", modifier = Modifier.weight(1f),
-                    keyboardType = KeyboardType.Number
+                    keyboardType = KeyboardType.Number,
+                    isError = heightError,
+                    errorMessage = "50–260 cm",
                 )
             }
             OnboardingTextField(
                 value = goalWeight, onValueChange = onGoalWeightChange,
                 label = "Goal Weight (kg)", keyboardType = KeyboardType.Decimal,
-                isError = goalWeightError
+                isError = goalWeightError,
+                errorMessage = "20–400 kg",
             )
         }
     }
@@ -345,6 +371,8 @@ private fun DemographicsStep(
     age: String, onAgeChange: (String) -> Unit,
     gender: String, onGenderChange: (String) -> Unit,
     canMove: Boolean,
+    mAgeError: Boolean = false,
+    mGenderError: Boolean = false,
     onNext: () -> Unit
 ) {
     OnboardingCard(title = "About You") {
@@ -356,12 +384,15 @@ private fun DemographicsStep(
                 Box(modifier = Modifier.weight(1f)) {
                     OnboardingTextField(
                         value = age, onValueChange = onAgeChange,
-                        label = "Age (years)", keyboardType = KeyboardType.Number
+                        label = "Age (years)",
+                        keyboardType = KeyboardType.Number,
+                        isError = mAgeError,
+                        errorMessage = "10–120 years",
                     )
                 }
             }
 
-            Text("Gender", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Gender", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -375,6 +406,13 @@ private fun DemographicsStep(
                     text = "Female",
                     isSelected = gender == "female",
                     onClick = { onGenderChange("female") }
+                )
+            }
+            if (mGenderError) {
+                Text(
+                    text = "Please select a gender",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
@@ -409,26 +447,26 @@ private fun SummaryStep(
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
                 text = "Great work, $name! Based on your profile, here's your starter plan:",
-                color = Color.White.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
             )
 
             Surface(
-                color = Color.White.copy(alpha = 0.15f),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SummaryRow("Daily Intake", "$recommended kcal", Color(0xFF00E5FF))
-                    SummaryRow("Maintenance", "$tdee kcal", Color.White.copy(alpha = 0.6f))
-                    SummaryRow("Water Goal", "$water ml", Color(0xFF2196F3))
-                    SummaryRow("Workouts", "$workouts days/week", Color(0xFF4CAF50))
+                    SummaryRow("Daily Intake", "$recommended kcal", MaterialTheme.colorScheme.primary)
+                    SummaryRow("Maintenance", "$tdee kcal", MaterialTheme.colorScheme.onSurfaceVariant)
+                    SummaryRow("Water Goal", "$water ml", MaterialTheme.colorScheme.tertiary)
+                    SummaryRow("Workouts", "$workouts days/week", MaterialTheme.colorScheme.secondary)
                 }
             }
             
             Text(
                 text = "You can adjust these goals later in your profile settings.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         }
     }
@@ -439,7 +477,7 @@ private fun SummaryStep(
 @Composable
 private fun SummaryRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.White.copy(alpha = 0.6f))
+        Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         Text(value, color = valueColor, fontWeight = FontWeight.Bold)
     }
 }
@@ -448,14 +486,14 @@ private fun SummaryRow(label: String, value: String, valueColor: Color) {
 private fun ActivityOption(title: String, description: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.6f),
-        border = if (isSelected) BorderStroke(1.dp, Color(0xFF00E5FF)) else null,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, color = if (isSelected) Color(0xFF00E5FF) else Color.White, fontWeight = FontWeight.Bold)
-            Text(description, color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            Text(title, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+            Text(description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -464,12 +502,12 @@ private fun ActivityOption(title: String, description: String, isSelected: Boole
 private fun DayChip(day: Int, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF) else Color.Black.copy(alpha = 0.6f),
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         shape = CircleShape,
         modifier = Modifier.size(40.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(day.toString(), color = if (isSelected) Color.Black else Color.White)
+            Text(day.toString(), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -479,7 +517,7 @@ private fun RowScope.GenderChip(text: String, isSelected: Boolean, onClick: () -
     val chipModifier = Modifier.weight(1f)
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF) else Color.Black.copy(alpha = 0.6f),
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(20.dp),
         modifier = chipModifier
     ) {
@@ -487,7 +525,7 @@ private fun RowScope.GenderChip(text: String, isSelected: Boolean, onClick: () -
             contentAlignment = Alignment.Center,
             modifier = Modifier.padding(vertical = 12.dp)
         ) {
-            Text(text, color = if (isSelected) Color.Black else Color.White, fontWeight = FontWeight.Bold)
+            Text(text, color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -498,11 +536,11 @@ private fun OnboardingCard(title: String, content: @Composable () -> Unit) {
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold
         )
         Surface(
-            color = Color.Black.copy(alpha = 0.85f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -520,29 +558,34 @@ private fun OnboardingTextField(
     label: String,
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
-    isError: Boolean = false
+    isError: Boolean = false,
+    errorMessage: String? = null,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.6f)) },
+        label = { Text(label) },
         singleLine = true,
         modifier = modifier.fillMaxWidth(),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(12.dp),
         isError = isError,
-        supportingText = if (isError) { { Text("20–400 kg", color = MaterialTheme.colorScheme.error) } } else null,
+        supportingText = if (isError && !errorMessage.isNullOrBlank()) {
+            { Text(errorMessage, color = MaterialTheme.colorScheme.error) }
+        } else {
+            null
+        },
         colors = TextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedContainerColor = Color.White.copy(alpha = 0.2f),
-            unfocusedContainerColor = Color.White.copy(alpha = 0.15f),
-            focusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color(0xFF00E5FF),
-            unfocusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.3f),
-            cursorColor = Color(0xFF00E5FF),
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            focusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            unfocusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
+            cursorColor = MaterialTheme.colorScheme.primary,
             errorIndicatorColor = MaterialTheme.colorScheme.error,
             errorTextColor = MaterialTheme.colorScheme.error,
-            errorContainerColor = Color.White.copy(alpha = 0.15f),
+            errorContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             errorSupportingTextColor = MaterialTheme.colorScheme.error
         )
     )
@@ -560,10 +603,10 @@ private fun OnboardingButton(
         modifier = Modifier.fillMaxWidth().height(56.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF00E5FF),
-            contentColor = Color.Black,
-            disabledContainerColor = Color.White.copy(alpha = 0.1f),
-            disabledContentColor = Color.White.copy(alpha = 0.3f)
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
         )
     ) {
         Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)

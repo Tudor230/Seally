@@ -690,7 +690,13 @@ fun PresetEditorPage(
     onSave: (String, List<ExerciseEntry>) -> Unit,
     onPickExercise: (Int) -> Unit,
 ) {
-    val canSave by remember(name) { derivedStateOf { name.trim().isNotBlank() && draftExercises.isNotEmpty() } }
+    val hasValidExercises by remember(draftExercises.toList()) {
+        derivedStateOf { draftExercises.any { it.isValidDraftExercise() } }
+    }
+    val nameError = name.isBlank()
+    val canSave by remember(name, hasValidExercises) {
+        derivedStateOf { name.trim().isNotBlank() && hasValidExercises }
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         CalendarSubPageHeader(
             title = if (initialPreset == null) "New Preset" else "Edit Preset",
@@ -706,6 +712,12 @@ fun PresetEditorPage(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 singleLine = true,
+                isError = nameError,
+                supportingText = {
+                    if (nameError) {
+                        Text("Preset name is required.")
+                    }
+                },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
@@ -746,6 +758,13 @@ fun PresetEditorPage(
                         onPickExercise = { onPickExercise(index) }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+                }
+                if (!hasValidExercises) {
+                    Text(
+                        text = "Add at least one complete exercise (name + value > 0).",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -971,6 +990,8 @@ fun WorkoutPlannerPage(
 
 @Composable
 fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, onRemove: () -> Unit, onPickExercise: () -> Unit) {
+    val nameError = entry.name.isBlank()
+    val valueError = entry.value.isNotBlank() && (entry.value.toDoubleOrNull()?.let { it > 0.0 } != true)
     Surface(
         modifier = Modifier.fillMaxWidth(), 
         shape = RoundedCornerShape(24.dp), 
