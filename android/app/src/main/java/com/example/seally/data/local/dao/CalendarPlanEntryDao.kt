@@ -13,6 +13,9 @@ interface CalendarPlanEntryDao {
     fun observeAll(): Flow<List<CalendarPlanEntryEntity>>
 
     @Query("SELECT * FROM calendar_plan_entry WHERE date = :date ORDER BY sort_order, id")
+    fun observeByDate(date: String): Flow<List<CalendarPlanEntryEntity>>
+
+    @Query("SELECT * FROM calendar_plan_entry WHERE date = :date ORDER BY sort_order, id")
     suspend fun getByDate(date: String): List<CalendarPlanEntryEntity>
 
     @Query("DELETE FROM calendar_plan_entry WHERE date = :date")
