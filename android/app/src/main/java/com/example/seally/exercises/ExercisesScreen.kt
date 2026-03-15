@@ -8,22 +8,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import androidx.compose.ui.window.Dialog
 import com.example.seally.calendar.CalendarScreen
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
@@ -34,6 +35,7 @@ import com.example.seally.data.repository.CalendarPlanRepository
 import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
+import com.example.seally.xp.XpCalculators
 import java.time.LocalDate
 
 @Composable
@@ -49,7 +51,35 @@ fun ExercisesScreen(
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
     var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+    var mExerciseSetupDialogExercise by remember { mutableStateOf<ExerciseType?>(null) }
+    var mShouldShowSessionXpDialog by remember { mutableStateOf(false) }
+    var mLastSessionEarnedXp by remember { mutableIntStateOf(0) }
+    var mLastSessionValue by remember { mutableIntStateOf(0) } // Reps or Seconds
+    var mLastSessionMetricLabel by remember { mutableStateOf("reps") } // "reps" or "seconds"
     val mIsOnSubpage = mSelectedExerciseForChecker != null || showDumbbellPage || showCalendar
+    val mCameraUiState by mCameraViewModel.uiState.collectAsState()
+
+    fun finishExerciseAndShowXp() {
+        val exercise = mCameraUiState.mSelectedExercise
+        val (xp, value, label) = when (exercise) {
+            ExerciseType.PLANK -> {
+                val seconds = (mCameraUiState.mFormFeedback.mMaxHoldDurationMs / 1000L).toInt().coerceAtLeast(0)
+                Triple(XpCalculators.totalPlankXpForSeconds(seconds), seconds, "seconds")
+            }
+            else -> {
+                val reps = mCameraUiState.mFormFeedback.mRepCount.coerceAtLeast(0)
+                Triple(XpCalculators.exerciseXpForRepDelta(reps), reps, "reps")
+            }
+        }
+        
+        mCameraViewModel.persistExerciseSessionOnExit()
+        mSelectedExerciseForChecker = null
+        
+        mLastSessionEarnedXp = xp
+        mLastSessionValue = value
+        mLastSessionMetricLabel = label
+        mShouldShowSessionXpDialog = true
+    }
 
     LaunchedEffect(mIsOnSubpage) {
         onDetailVisibilityChanged(!mIsOnSubpage)
@@ -58,12 +88,20 @@ fun ExercisesScreen(
     BackHandler(enabled = mIsOnSubpage) {
         when {
             mSelectedExerciseForChecker != null -> {
-                mCameraViewModel.persistExerciseSessionOnExit()
-                mSelectedExerciseForChecker = null
+                finishExerciseAndShowXp()
             }
             showDumbbellPage -> showDumbbellPage = false
             showCalendar -> showCalendar = false
         }
+    }
+
+    if (mShouldShowSessionXpDialog) {
+        ExerciseResultDialog(
+            onDismiss = { mShouldShowSessionXpDialog = false },
+            xpEarned = mLastSessionEarnedXp,
+            value = mLastSessionValue,
+            metricLabel = mLastSessionMetricLabel
+        )
     }
 
     if (mSelectedExerciseForChecker != null) {
@@ -75,8 +113,7 @@ fun ExercisesScreen(
             )
             IconButton(
                 onClick = {
-                    mCameraViewModel.persistExerciseSessionOnExit()
-                    mSelectedExerciseForChecker = null
+                    finishExerciseAndShowXp()
                 },
                 modifier = Modifier
                     .statusBarsPadding()
@@ -98,10 +135,23 @@ fun ExercisesScreen(
             modifier = modifier,
             onBackClick = { showDumbbellPage = false },
             onExerciseSelected = { mExercise ->
-                mCameraViewModel.setSelectedExercise(mExercise)
-                mSelectedExerciseForChecker = mExercise
+                mExerciseSetupDialogExercise = mExercise
             },
         )
+        mExerciseSetupDialogExercise?.let { mExercise ->
+            ExerciseTargetSetupDialog(
+                mExerciseType = mExercise,
+                onDismiss = { mExerciseSetupDialogExercise = null },
+                onStart = { targetUnits ->
+                    mCameraViewModel.startExerciseSession(
+                        mExerciseType = mExercise,
+                        mTargetUnits = targetUnits,
+                    )
+                    mSelectedExerciseForChecker = mExercise
+                    mExerciseSetupDialogExercise = null
+                },
+            )
+        }
         return
     }
 
@@ -222,16 +272,241 @@ fun ExercisesScreen(
             }
         }
 
-        // Seal/character - consistent anchoring
-        AsyncImage(
-            model = musclesImageRequest,
-            contentDescription = "Seal",
-            contentScale = ContentScale.Fit,
+    }
+}
+
+@Composable
+private fun ExerciseResultDialog(
+    onDismiss: () -> Unit,
+    xpEarned: Int,
+    value: Int,
+    metricLabel: String
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.75f)
-                .padding(bottom = 20.dp)
-        )
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // Header
+                Text(
+                    text = "Exercise done!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Stats Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left: Value (Reps/Seconds)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "$value",
+                            style = MaterialTheme.typography.displayMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = metricLabel.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Divider
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(48.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+
+                    // Right: XP
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "+$xpEarned",
+                            style = MaterialTheme.typography.displayMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "XP Earned",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Confirm Button
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Nice")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseTargetSetupDialog(
+    mExerciseType: ExerciseType,
+    onDismiss: () -> Unit,
+    onStart: (targetUnits: Int) -> Unit,
+) {
+    val isPlank = mExerciseType == ExerciseType.PLANK
+    var mTargetUnits by remember(mExerciseType) {
+        mutableIntStateOf(if (isPlank) 30 else 10)
+    }
+    
+    val mExpectedXp = if (isPlank) {
+        XpCalculators.totalPlankXpForSeconds(mTargetUnits)
+    } else {
+        XpCalculators.exerciseXpForRepDelta(mTargetUnits)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // Header
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Set Your Goal",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isPlank) "How many seconds?" else "How many reps?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Number Picker
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    FilledIconButton(
+                        onClick = { 
+                            val step = if (isPlank) 5 else 1
+                            if (mTargetUnits > step) mTargetUnits -= step 
+                        },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                    }
+
+                    Text(
+                        text = "$mTargetUnits",
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.widthIn(min = 60.dp),
+                        textAlign = TextAlign.Center
+                    )
+
+                    FilledIconButton(
+                        onClick = { 
+                            val step = if (isPlank) 5 else 1
+                            mTargetUnits += step 
+                        },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Increase")
+                    }
+                }
+
+                // XP Preview
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Reward:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = "+$mExpectedXp XP",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = { onStart(mTargetUnits) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Start")
+                    }
+                }
+            }
+        }
     }
 }
 

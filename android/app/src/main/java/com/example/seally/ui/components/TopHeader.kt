@@ -28,6 +28,8 @@ fun TopHeader(
     val context = LocalContext.current
     val xpViewModel: XpViewModel = viewModel(factory = XpViewModel.Factory)
     val levelState by xpViewModel.levelState.collectAsState()
+    val expectedLevelState by xpViewModel.expectedLevelState.collectAsState()
+    val pendingTodayXp by xpViewModel.pendingTodayXp.collectAsState()
 
     val profilePictureRequest = ImageRequest.Builder(context)
         .data("file:///android_asset/icons/profilePicture.png")
@@ -91,14 +93,32 @@ fun TopHeader(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
+                    if (pendingTodayXp != 0) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            val sign = if (pendingTodayXp > 0) "+" else ""
+                            Text(
+                                text = "Expected ${sign}${pendingTodayXp}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
 
                 LinearProgressBar(
-                    progress = levelState.progress,
+                    progress = expectedLevelState.progress,
                     modifier = Modifier.fillMaxWidth().height(6.dp),
-                    filledColor = MaterialTheme.colorScheme.primary,
+                    filledColor = if (pendingTodayXp >= 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
                     trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                     borderColor = Color.Transparent,
                     cornerRadius = 3.dp,
