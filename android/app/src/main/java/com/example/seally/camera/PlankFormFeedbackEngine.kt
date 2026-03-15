@@ -115,6 +115,7 @@ class PlankFormFeedbackEngine {
     private fun updateTimer(isGoodForm: Boolean, frameTimestampMs: Long) {
         if (!isGoodForm) {
             mLastGoodFormTimestampMs = null
+            mAccumulatedGoodFormMs = 0L
             return
         }
 
