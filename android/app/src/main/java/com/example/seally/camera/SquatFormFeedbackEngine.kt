@@ -86,9 +86,6 @@ class SquatFormFeedbackEngine {
             if (shoulderForwardDelta > SHOULDER_FORWARD_MAX_M) {
                 frameCue = "Keep your chest up"
                 frameJoints = listOf("shoulder", "ankle")
-            } else if ((sideLandmarks.mKnee.x() - sideLandmarks.mFootIndex.x()) > KNEE_FORWARD_MAX_M) {
-                frameCue = "Knees over mid-foot"
-                frameJoints = listOf("knee", "ankle")
             }
         }
 
@@ -359,7 +356,6 @@ class SquatFormFeedbackEngine {
         private const val BOTTOM_ANGLE_DEG = 100f
         private const val REQUIRED_DEPTH_ANGLE_DEG = 90f
         private const val SHOULDER_FORWARD_MAX_M = 0.16f
-        private const val KNEE_FORWARD_MAX_M = 0.05f
         private const val ARM_STRAIGHT_MIN_ANGLE_DEG = 160f
         private const val ARM_FORWARD_MIN_DISTANCE_M = 0.08f
         private const val ARM_HEIGHT_TOLERANCE_M = 0.12f
