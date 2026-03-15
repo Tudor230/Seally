@@ -13,47 +13,76 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.seally.data.local.entity.ExerciseLogEntity
+import com.example.seally.data.repository.ExerciseLogRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.ui.components.AppScreenBackground
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 private data class ExerciseEntry(
     val name: String,
-    val sets: Int,
-    val reps: Int,
+    val metric: String,
+    val value: String,
 )
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+private data class ExerciseCatalogEntry(
+    val name: String,
+    val metric: String,
+)
+
+private val FALLBACK_CATALOG_ENTRY = ExerciseCatalogEntry(name = "Push-ups", metric = "reps")
+
+private fun defaultExerciseEntry(catalog: List<ExerciseCatalogEntry>): ExerciseEntry {
+    val mDefaultEntry = catalog.firstOrNull() ?: FALLBACK_CATALOG_ENTRY
+    return ExerciseEntry(
+        name = mDefaultEntry.name,
+        metric = mDefaultEntry.metric,
+        value = "",
+    )
+}
+
+private fun catalogEntryFor(
+    catalog: List<ExerciseCatalogEntry>,
+    name: String,
+): ExerciseCatalogEntry? {
+    return catalog.firstOrNull { it.name.equals(name, ignoreCase = true) }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val mExerciseLogRepository = remember(context) { ExerciseLogRepository(context.applicationContext) }
+    val mExerciseCatalog = remember(context) { loadExerciseCatalog(context) }
     val today = remember { LocalDate.now() }
     var selectedDate by rememberSaveable { mutableStateOf(today) }
-    val workoutByDate = remember { mutableStateMapOf<LocalDate, List<ExerciseEntry>>() }
+    val mExerciseLogs by mExerciseLogRepository.observeAll().collectAsState(initial = emptyList())
+    val workoutByDate = remember(mExerciseLogs, mExerciseCatalog) {
+        mExerciseLogs.toWorkoutMap(mExerciseCatalog)
+    }
     var isEntryDialogOpen by rememberSaveable { mutableStateOf(false) }
     val draftExercises = remember { mutableStateListOf<ExerciseEntry>() }
 
@@ -67,21 +96,46 @@ fun CalendarScreen(
         startMonth.plusMonths((pagerState.currentPage - startPage).toLong())
     }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        monthTitle(currentMonth),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        AppScreenBackground(assetPath = "backgrounds/calendar.png")
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+        ) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
-                },
-                actions = {
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = monthTitle(currentMonth),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row {
                     IconButton(onClick = {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
                     }) {
@@ -93,85 +147,135 @@ fun CalendarScreen(
                         Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next")
                     }
                 }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-            DaysOfWeekHeader()
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) { page ->
-                val month = startMonth.plusMonths((page - startPage).toLong())
-                MonthGrid(
-                    month = month,
-                    selectedDate = selectedDate,
-                    today = today,
-                    workoutDates = workoutByDate.keys,
-                    onDayClick = { clicked ->
-                        selectedDate = clicked
-                        draftExercises.clear()
-                        workoutByDate[clicked]?.let { existing -> draftExercises.addAll(existing) }
-                        if (draftExercises.isEmpty()) {
-                            draftExercises.add(ExerciseEntry(name = "", sets = 3, reps = 10))
-                        }
-                        isEntryDialogOpen = true
-                    },
-                )
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                thickness = DividerDefaults.Thickness,
-                color = DividerDefaults.color
-            )
+            // Calendar Card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                shadowElevation = 2.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    DaysOfWeekHeader()
+                    
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) { page ->
+                        val month = startMonth.plusMonths((page - startPage).toLong())
+                        MonthGrid(
+                            month = month,
+                            selectedDate = selectedDate,
+                            today = today,
+                            workoutDates = workoutByDate.keys,
+                            onDayClick = { clicked ->
+                                selectedDate = clicked
+                                draftExercises.clear()
+                                workoutByDate[clicked]?.let { existing -> draftExercises.addAll(existing) }
+                                if (draftExercises.isEmpty()) {
+                                    draftExercises.add(defaultExerciseEntry(mExerciseCatalog))
+                                }
+                                isEntryDialogOpen = true
+                            },
+                        )
+                    }
+                }
+            }
 
-            // Preview Section
-            Text(
-                text = "Plan for ${selectedDate.dayOfMonth} ${selectedDate.month.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Details Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Activity for ${selectedDate.dayOfMonth} ${selectedDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                TextButton(onClick = {
+                    draftExercises.clear()
+                    workoutByDate[selectedDate]?.let { existing -> draftExercises.addAll(existing) }
+                    if (draftExercises.isEmpty()) {
+                        draftExercises.add(defaultExerciseEntry(mExerciseCatalog))
+                    }
+                    isEntryDialogOpen = true
+                }) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit Plan", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             val dayWorkouts = workoutByDate[selectedDate]
             if (dayWorkouts.isNullOrEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No exercises planned",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            "No training scheduled for today",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     dayWorkouts.forEach { entry ->
-                        ListItem(
-                            headlineContent = { Text(entry.name.ifBlank { "Unnamed Exercise" }) },
-                            supportingContent = { Text("${entry.sets} sets × ${entry.reps} reps") },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            leadingContent = {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Surface(
-                                    modifier = Modifier.size(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {}
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.FitnessCenter, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        text = entry.name.ifBlank { "Unnamed Exercise" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${entry.value.ifBlank { "0" }} ${entry.metric}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(100.dp))
                 }
             }
         }
@@ -180,15 +284,36 @@ fun CalendarScreen(
     if (isEntryDialogOpen) {
         WorkoutListDialog(
             date = selectedDate,
+            exerciseCatalog = mExerciseCatalog,
             draftExercises = draftExercises,
             onDismiss = { isEntryDialogOpen = false },
             onClear = {
-                workoutByDate.remove(selectedDate)
-                isEntryDialogOpen = false
+                val mDate = selectedDate.toString()
+                scope.launch {
+                    mExerciseLogRepository.deleteByDate(mDate)
+                    isEntryDialogOpen = false
+                }
             },
             onSave = {
-                workoutByDate[selectedDate] = draftExercises.toList()
-                isEntryDialogOpen = false
+                val mDate = selectedDate.toString()
+                val mEntriesToPersist = draftExercises
+                    .mapNotNull { entry ->
+                        val mQuantity = entry.value.toDoubleOrNull() ?: return@mapNotNull null
+                        if (mQuantity <= 0.0) return@mapNotNull null
+                        entry to mQuantity
+                    }
+                scope.launch {
+                    mExerciseLogRepository.deleteByDate(mDate)
+                    mEntriesToPersist.forEach { (entry, quantity) ->
+                        mExerciseLogRepository.addLog(
+                            exerciseName = entry.name,
+                            quantity = quantity,
+                            metric = entry.metric,
+                            date = mDate,
+                        )
+                    }
+                    isEntryDialogOpen = false
+                }
             },
         )
     }
@@ -196,14 +321,17 @@ fun CalendarScreen(
 
 @Composable
 private fun DaysOfWeekHeader() {
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        DayOfWeek.values().forEach { dow ->
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        listOf(
+            DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY
+        ).forEach { dow ->
             Text(
-                text = dow.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
+                text = dow.getDisplayName(TextStyle.SHORT, Locale.getDefault()).first().toString(),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
                 ),
                 modifier = Modifier.weight(1f),
             )
@@ -262,12 +390,12 @@ private fun DayCell(
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .padding(4.dp)
+            .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(
                 when {
-                    isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isToday -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     else -> Color.Transparent
                 }
             )
@@ -278,41 +406,45 @@ private fun DayCell(
             Text(
                 text = date.dayOfMonth.toString(),
                 color = when {
-                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> MaterialTheme.colorScheme.onBackground
+                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                    isToday -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurface
                 },
-                style = MaterialTheme.typography.bodyLarge.copy(
+                style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal
                 ),
             )
-            // Workout Indicator Dot
             if (hasWorkout) {
                 Box(
                     modifier = Modifier
                         .padding(top = 2.dp)
-                        .size(6.dp)
+                        .size(4.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary),
+                        .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary),
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorkoutListDialog(
     date: LocalDate,
+    exerciseCatalog: List<ExerciseCatalogEntry>,
     draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<ExerciseEntry>,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onSave: () -> Unit,
 ) {
+    var mExpandedExerciseIndex by remember { mutableStateOf<Int?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Edit Plan: ${date.dayOfMonth} ${date.month.name.lowercase()}",
-                style = MaterialTheme.typography.headlineSmall
+                text = "Training Plan",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
@@ -321,71 +453,185 @@ private fun WorkoutListDialog(
                     .fillMaxWidth()
                     .heightIn(max = 400.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Text(
+                    text = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
                 draftExercises.forEachIndexed { index, entry ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                    val mIsExerciseMenuExpanded = mExpandedExerciseIndex == index
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
-                                    value = entry.name,
-                                    onValueChange = { draftExercises[index] = entry.copy(name = it) },
-                                    label = { Text("Exercise") },
+                                ExposedDropdownMenuBox(
+                                    expanded = mIsExerciseMenuExpanded,
+                                    onExpandedChange = { isExpanded ->
+                                        mExpandedExerciseIndex = if (isExpanded) index else null
+                                    },
                                     modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
+                                ) {
+                                    OutlinedTextField(
+                                        value = entry.name,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("Exercise") },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = mIsExerciseMenuExpanded)
+                                        },
+                                        modifier = Modifier
+                                            .menuAnchor()
+                                            .fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
+                                    ExposedDropdownMenu(
+                                        expanded = mIsExerciseMenuExpanded,
+                                        onDismissRequest = { mExpandedExerciseIndex = null },
+                                    ) {
+                                        exerciseCatalog.forEach { catalogEntry ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text("${catalogEntry.name} (${catalogEntry.metric})")
+                                                },
+                                                onClick = {
+                                                    draftExercises[index] = entry.copy(
+                                                        name = catalogEntry.name,
+                                                        metric = catalogEntry.metric,
+                                                    )
+                                                    mExpandedExerciseIndex = null
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
                                 IconButton(onClick = {
+                                    if (mExpandedExerciseIndex == index) {
+                                        mExpandedExerciseIndex = null
+                                    }
                                     if (draftExercises.size > 1) draftExercises.removeAt(index)
-                                    else draftExercises[index] = ExerciseEntry("", 3, 10)
+                                    else draftExercises[index] = defaultExerciseEntry(exerciseCatalog)
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
-                            Row(
-                                modifier = Modifier.padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = entry.sets.toString(),
-                                    onValueChange = { draftExercises[index] = entry.copy(sets = it.toIntOrNull() ?: 0) },
-                                    label = { Text("Sets") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                                OutlinedTextField(
-                                    value = entry.reps.toString(),
-                                    onValueChange = { draftExercises[index] = entry.copy(reps = it.toIntOrNull() ?: 0) },
-                                    label = { Text("Reps") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                )
-                            }
+                            OutlinedTextField(
+                                value = entry.value,
+                                onValueChange = { nextValue ->
+                                    draftExercises[index] = entry.copy(value = sanitizeMetricValueInput(nextValue))
+                                },
+                                label = { Text(entry.metric.replaceFirstChar { it.titlecase() }) },
+                                suffix = { Text(entry.metric) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true,
+                            )
                         }
                     }
                 }
-                TextButton(
-                    onClick = { draftExercises.add(ExerciseEntry("", 3, 10)) },
-                    modifier = Modifier.fillMaxWidth()
+                
+                OutlinedButton(
+                    onClick = { draftExercises.add(defaultExerciseEntry(exerciseCatalog)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Add Another Exercise")
+                    Text("Add Exercise")
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onSave, shape = RoundedCornerShape(8.dp)) { Text("Save Changes") }
+            Button(onClick = onSave, shape = RoundedCornerShape(12.dp)) { Text("Save Plan") }
         },
         dismissButton = {
-            TextButton(onClick = onClear) { Text("Clear All", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onClear) { Text("Clear Plan", color = MaterialTheme.colorScheme.error) }
         },
+        shape = RoundedCornerShape(28.dp)
     )
 }
 
 private fun monthTitle(month: YearMonth): String {
     return "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}"
+}
+
+private fun List<ExerciseLogEntity>.toWorkoutMap(
+    catalog: List<ExerciseCatalogEntry>,
+): Map<LocalDate, List<ExerciseEntry>> {
+    return this
+        .mapNotNull { log ->
+            val mDate = runCatching { LocalDate.parse(log.date) }.getOrNull() ?: return@mapNotNull null
+            mDate to log.toExerciseEntry(catalog)
+        }
+        .groupBy(
+            keySelector = { it.first },
+            valueTransform = { it.second },
+        )
+}
+
+private fun ExerciseLogEntity.toExerciseEntry(
+    catalog: List<ExerciseCatalogEntry>,
+): ExerciseEntry {
+    val mCatalogEntry = catalogEntryFor(catalog, exerciseName)
+    val mResolvedMetric = when {
+        metric.startsWith("sets:") -> "reps"
+        metric.isNotBlank() -> metric
+        mCatalogEntry != null -> mCatalogEntry.metric
+        else -> "units"
+    }
+    return ExerciseEntry(
+        name = exerciseName,
+        metric = mResolvedMetric,
+        value = formatMetricValue(quantity),
+    )
+}
+
+private fun loadExerciseCatalog(context: android.content.Context): List<ExerciseCatalogEntry> {
+    val mLoadedCatalog = runCatching {
+        val mJsonText = context.assets.open("data/home_exercise_catalog.json").bufferedReader().use { it.readText() }
+        val mJsonArray = JSONArray(mJsonText)
+        buildList {
+            for (index in 0 until mJsonArray.length()) {
+                val item = mJsonArray.getJSONObject(index)
+                val mName = item.optString("name").trim()
+                val mMetric = item.optString("metric").trim()
+                if (mName.isNotBlank() && mMetric.isNotBlank()) {
+                    add(ExerciseCatalogEntry(name = mName, metric = mMetric))
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
+    return if (mLoadedCatalog.isNotEmpty()) {
+        mLoadedCatalog
+    } else {
+        listOf(FALLBACK_CATALOG_ENTRY)
+    }
+}
+
+private fun sanitizeMetricValueInput(input: String): String {
+    val mFiltered = input.filter { it.isDigit() || it == '.' }
+    val mFirstDot = mFiltered.indexOf('.')
+    if (mFirstDot == -1) return mFiltered
+    val mWithoutExtraDots = buildString {
+        append(mFiltered.substring(0, mFirstDot + 1))
+        append(mFiltered.substring(mFirstDot + 1).replace(".", ""))
+    }
+    return mWithoutExtraDots
+}
+
+private fun formatMetricValue(quantity: Double): String {
+    return if (quantity % 1.0 == 0.0) {
+        quantity.toInt().toString()
+    } else {
+        quantity.toString()
+    }
 }

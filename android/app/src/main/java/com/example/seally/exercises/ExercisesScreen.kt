@@ -1,34 +1,38 @@
 package com.example.seally.exercises
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
+import com.example.seally.calendar.WorkoutPlanViewModel
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.camera.ExerciseType
+import com.example.seally.ui.components.AppScreenBackground
+import com.example.seally.ui.components.TopHeader
+import java.time.LocalDate
 
 @Composable
 fun ExercisesScreen(
@@ -36,10 +40,25 @@ fun ExercisesScreen(
     mCameraViewModel: CameraViewModel,
     onLeftActionClick: () -> Unit = {},
     onRightActionClick: () -> Unit = {},
+    onDetailVisibilityChanged: (Boolean) -> Unit = {},
+    onProfileClick: () -> Unit = {},
 ) {
     var showDumbbellPage by remember { mutableStateOf(false) }
     var showCalendar by remember { mutableStateOf(false) }
     var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
+    val mIsOnSubpage = mSelectedExerciseForChecker != null || showDumbbellPage || showCalendar
+
+    LaunchedEffect(mIsOnSubpage) {
+        onDetailVisibilityChanged(!mIsOnSubpage)
+    }
+
+    BackHandler(enabled = mIsOnSubpage) {
+        when {
+            mSelectedExerciseForChecker != null -> mSelectedExerciseForChecker = null
+            showDumbbellPage -> showDumbbellPage = false
+            showCalendar -> showCalendar = false
+        }
+    }
 
     if (mSelectedExerciseForChecker != null) {
         Box(modifier = modifier.fillMaxSize()) {
@@ -51,17 +70,16 @@ fun ExercisesScreen(
             IconButton(
                 onClick = { mSelectedExerciseForChecker = null },
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 10.dp, top = 12.dp),
+                    .statusBarsPadding()
+                    .padding(16.dp)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
-            Text(
-                text = "Form checker",
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 20.dp),
-            )
         }
         return
     }
@@ -87,95 +105,114 @@ fun ExercisesScreen(
     }
 
     val context = LocalContext.current
-
-    val headerImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/line.png")
+    val mWorkoutPlanViewModel: WorkoutPlanViewModel = viewModel()
+    val mTodayWorkout = mWorkoutPlanViewModel.mWorkoutPlans[LocalDate.now()].orEmpty()
+    val musclesImageRequest = ImageRequest.Builder(context)
+        .data("file:///android_asset/seals/muscles.png")
         .build()
 
-    val skinnyImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/muscles.png")
-        .build()
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        AppScreenBackground(assetPath = "backgrounds/gym.png")
 
-    val calendarIconRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/sealcalendar.png")
-        .build()
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            TopHeader(onProfileClick = onProfileClick)
 
-    val dumbbellIconRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/dumbbell_icon - no background.png")
-        .build()
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                shadowElevation = 1.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "Workout of the day",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
 
-    val backgroundRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/icons/gyim.jpeg")
-        .build()
+                    if (mTodayWorkout.isEmpty()) {
+                        Text(
+                            text = "You do not have anything planned for today.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(onClick = { showCalendar = true }) {
+                            Text("Plan workout")
+                        }
+                    } else {
+                        val mSummary = mTodayWorkout
+                            .take(2)
+                            .joinToString(" • ") { "${it.name.ifBlank { "Exercise" }} (${it.sets}x${it.reps})" }
+                        Text(
+                            text = mSummary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(onClick = { showCalendar = true }) {
+                            Text("Open planned workout")
+                        }
+                    }
+                }
+            }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Background image
-        AsyncImage(
-            model = backgroundRequest,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alpha = 0.65f,
-            modifier = Modifier.fillMaxSize(),
-        )
+            Box(modifier = Modifier.weight(1f))
+        }
 
-        // Top header image (same style as Home)
-        AsyncImage(
-            model = headerImageRequest,
-            contentDescription = "Header image",
-            contentScale = ContentScale.Fit,
+        // --- Action Buttons (Similar to Nutrition Section) ---
+        Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 40.dp)
-                .size(220.dp),
-        )
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            FloatingActionButton(
+                onClick = {
+                    onLeftActionClick()
+                    showDumbbellPage = true
+                },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Icon(Icons.Default.FitnessCenter, contentDescription = "Workouts", modifier = Modifier.size(32.dp))
+            }
 
-        // Seal/character in the middle, above the bottom nav
+            FloatingActionButton(
+                onClick = {
+                    onRightActionClick()
+                    showCalendar = true
+                },
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.size(72.dp)
+            ) {
+                Icon(Icons.Default.DateRange, contentDescription = "History", modifier = Modifier.size(32.dp))
+            }
+        }
+
+        // Seal/character - consistent anchoring
         AsyncImage(
-            model = skinnyImageRequest,
+            model = musclesImageRequest,
             contentDescription = "Seal",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-               // .offset(y = 0.dp)
-                .fillMaxHeight(0.88f)
-                .padding(horizontal = 12.dp)
+                .fillMaxHeight(0.75f)
+                .padding(bottom = 20.dp)
         )
-
-        // Two action buttons bottom-left / bottom-right of the seal, above the nav bar
-        IconButton(
-            onClick = {
-                onLeftActionClick()
-                showDumbbellPage = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 24.dp, bottom = 60.dp)
-                .semantics { contentDescription = "Dumbbell" },
-        ) {
-            AsyncImage(
-                model = dumbbellIconRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(64.dp),
-            )
-        }
-
-        IconButton(
-            onClick = {
-                onRightActionClick()
-                showCalendar = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 60.dp)
-                .semantics { contentDescription = "Calendar" },
-        ) {
-            AsyncImage(
-                model = calendarIconRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(64.dp),
-            )
-        }
     }
 }
