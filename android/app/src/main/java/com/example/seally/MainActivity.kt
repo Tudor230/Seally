@@ -140,22 +140,11 @@ class MainActivity : ComponentActivity() {
 @PreviewScreenSizes
 @Composable
 fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     val context = LocalContext.current
     val nutritionViewModel: NutritionViewModel = viewModel()
 
     val pagerState = rememberPagerState(pageCount = { AppDestinations.entries.size })
     val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(currentDestination) {
-        if (currentDestination != AppDestinations.entries[pagerState.currentPage]) {
-            pagerState.animateScrollToPage(currentDestination.ordinal)
-        }
-    }
-
-    LaunchedEffect(pagerState.currentPage) {
-        currentDestination = AppDestinations.entries[pagerState.currentPage]
-    }
 
     LaunchedEffect(Unit) {
         val hasCameraPermission = ContextCompat.checkSelfPermission(
@@ -174,6 +163,8 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
     var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
 
+    val currentDestination = AppDestinations.entries[pagerState.currentPage]
+
     BackHandler {
         if (shouldShowProfile) {
             shouldShowProfile = false
@@ -186,7 +177,9 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
         }
 
         if (currentDestination != AppDestinations.HOME) {
-            currentDestination = AppDestinations.HOME
+            coroutineScope.launch {
+                pagerState.animateScrollToPage(AppDestinations.HOME.ordinal)
+            }
             return@BackHandler
         }
 
@@ -216,7 +209,11 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                         AppDestinations.entries.forEach { destination ->
                             NavigationBarItem(
                                 selected = destination == currentDestination,
-                                onClick = { currentDestination = destination },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(destination.ordinal)
+                                    }
+                                },
                                 icon = {
                                     DestinationIcon(destination)
                                 },
