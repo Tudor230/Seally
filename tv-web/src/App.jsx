@@ -360,6 +360,13 @@ function App() {
     }
   }
 
+  const handleCopyCode = () => {
+    if (mRoomCode) {
+      navigator.clipboard.writeText(mRoomCode)
+      // Optional: Show a temporary "Copied!" toast or tooltip
+    }
+  }
+
   const handleDisconnect = () => {
     mRoom?.disconnect()
     setMRoom(null)
@@ -403,22 +410,42 @@ function App() {
 
       <section className="panel">
         <div className="actions">
-          <button disabled={!!mRoom} onClick={handleGenerateRoomCode}>
-            Generate Seal Room Code
-          </button>
+          {!mRoom ? (
+            <button className="btn-primary" onClick={handleGenerateRoomCode}>
+              Generate Seal Room Code
+            </button>
+          ) : (
+             <button className="btn-secondary" onClick={handleDisconnect}>
+              Disconnect
+            </button>
+          )}
         </div>
         {mRoomCode && (
           <div className="room-code-display">
-            <p><strong>Room Code:</strong> <span className="code">{mRoomCode}</span></p>
-            <p className="hint">Share this code with the mobile seal tracker to dock the session</p>
+            <div className="code-container">
+                <span className="code-label">ROOM CODE</span>
+                <div className="code-value-row">
+                    <span className="code">{mRoomCode}</span>
+                    <button className="btn-icon" onClick={handleCopyCode} title="Copy Code">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.24264C20 6.71221 19.7893 6.20357 19.4142 5.82843L16.1716 2.58579C15.7964 2.21071 15.2878 2 14.7574 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <p className="hint">Share this code with the mobile app to connect</p>
           </div>
         )}
       </section>
 
-      <section className="status">
-        <p><strong>Harbor Status:</strong> {mStatus}</p>
-        <p className="debug">{mDebug}</p>
-        {mError && <p className="error">{mError}</p>}
+      <section className="status-bar">
+        <div className={`status-indicator ${mStatus.startsWith('Connected') ? 'connected' : 'disconnected'}`}></div>
+        <div className="status-text">
+            <strong>Status:</strong> {mStatus}
+        </div>
+        {mDebug && <div className="debug-info">{mDebug}</div>}
+        {mError && <div className="error-toast">{mError}</div>}
       </section>
 
       <section ref={mVideoStageRef} className={`video-stage${mIsFullscreen ? ' fullscreen' : ''}`}>
