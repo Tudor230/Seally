@@ -235,8 +235,9 @@ fun ProfileScreen(
                             waterTargetMl = profile.waterTargetMl,
                             onboardingCompleted = profile.onboardingCompleted,
                         )
-                        onBackClick()
-                    },
+                    )
+                    onBackClick()
+                },
                     enabled = canSave,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
