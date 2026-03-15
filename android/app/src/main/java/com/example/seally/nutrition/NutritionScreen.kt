@@ -63,6 +63,8 @@ import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.data.repository.TargetRepository
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
+import com.example.seally.xp.XpCalculators
+import com.example.seally.xp.XpProjectionRepository
 import com.example.seally.xp.XpRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -136,12 +138,6 @@ private data class MealRating(
     val category: MealRatingCategory,
 )
 
-private data class DailyXpMacro(
-    val target: Int,
-    val eaten: Int,
-    val weight: Float,
-)
-
 class NutritionViewModel(application: Application) : AndroidViewModel(application) {
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
@@ -149,6 +145,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     private val mFinalizeDateKey = stringPreferencesKey("daily_xp_finalized_date")
     private val mTargetRepository = TargetRepository(application)
     private val mDailyGoalProgressRepository = DailyGoalProgressRepository(application)
+    private val mXpProjectionRepository = XpProjectionRepository(application)
     private val mCurrentDate: String = LocalDate.now().toString()
     private var mPersistedFoodEntries: List<NutritionFoodEntryEntity> = emptyList()
     private var mPersistedWaterMl: Int = 0
@@ -262,40 +259,23 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             if (finalizedDate == previousDate) return@launch
 
             val previousEntries = mNutritionFoodEntryRepository.getByDate(previousDate)
-            val previousDailyXp = computeDailyXp(
-                protein = DailyXpMacro(
-                    target = DEFAULT_PROTEIN_TARGET,
-                    eaten = previousEntries.sumOf { it.protein },
-                    weight = 0.25f,
-                ),
-                carbs = DailyXpMacro(
-                    target = DEFAULT_CARBS_TARGET,
-                    eaten = previousEntries.sumOf { it.carbs },
-                    weight = 0.15f,
-                ),
-                fat = DailyXpMacro(
-                    target = DEFAULT_FAT_TARGET,
-                    eaten = previousEntries.sumOf { it.fats },
-                    weight = 0.15f,
-                ),
-                fiber = DailyXpMacro(
-                    target = DEFAULT_FIBER_TARGET,
-                    eaten = previousEntries.sumOf { it.fibers },
-                    weight = 0.20f,
-                ),
-                sugar = DailyXpMacro(
-                    target = DEFAULT_SUGAR_TARGET,
-                    eaten = previousEntries.sumOf { it.sugars },
-                    weight = 0.15f,
-                ),
-                calories = DailyXpMacro(
-                    target = DEFAULT_CALORIE_TARGET,
-                    eaten = previousEntries.sumOf { it.calories },
-                    weight = 0.10f,
-                ),
+            val previousNutritionXp = XpCalculators.nutritionDailyXp(
+                calories = previousEntries.sumOf { it.calories },
+                protein = previousEntries.sumOf { it.protein },
+                carbs = previousEntries.sumOf { it.carbs },
+                fats = previousEntries.sumOf { it.fats },
+                sugars = previousEntries.sumOf { it.sugars },
+                fibers = previousEntries.sumOf { it.fibers },
+            )
+            val previousLog = mNutritionLogRepository.getByDate(previousDate)
+            val waterTargetMl = resolveWaterTargetMl()
+            val previousWaterXp = XpCalculators.waterDailyXp(
+                consumedMl = previousLog?.waterMl ?: 0,
+                targetMl = waterTargetMl,
             )
 
-            mXpRepository.addXp(previousDailyXp)
+            mXpRepository.addXp(previousNutritionXp)
+            mXpRepository.addXp(previousWaterXp)
             dataStore.edit { it[mFinalizeDateKey] = previousDate }
         }
     }
@@ -315,6 +295,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 mWaterConsumedMl = log?.waterMl ?: 0
                 mPersistedWaterMl = mWaterConsumedMl
                 syncNutritionGoalsProgress()
+                updateTodayPendingXpProjection()
             }
         }
         viewModelScope.launch {
@@ -324,6 +305,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 mFoods.addAll(entries.map { it.toFoodEntry() })
                 syncNutritionLogFromFoodEntries()
                 syncNutritionGoalsProgress()
+                updateTodayPendingXpProjection()
             }
         }
     }
@@ -375,6 +357,28 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
+    }
+
+    private suspend fun resolveWaterTargetMl(): Int {
+        val waterGoalTarget = mTargetRepository.getByGoalName("WATER")?.targetValue?.roundToInt()
+        return (waterGoalTarget ?: DEFAULT_WATER_TARGET_ML).coerceAtLeast(1)
+    }
+
+    private suspend fun updateTodayPendingXpProjection() {
+        val projectedNutritionXp = XpCalculators.nutritionDailyXp(
+            calories = mPersistedFoodEntries.sumOf { it.calories },
+            protein = mPersistedFoodEntries.sumOf { it.protein },
+            carbs = mPersistedFoodEntries.sumOf { it.carbs },
+            fats = mPersistedFoodEntries.sumOf { it.fats },
+            sugars = mPersistedFoodEntries.sumOf { it.sugars },
+            fibers = mPersistedFoodEntries.sumOf { it.fibers },
+        )
+        val waterTargetMl = resolveWaterTargetMl()
+        val projectedWaterXp = XpCalculators.waterDailyXp(
+            consumedMl = mPersistedWaterMl,
+            targetMl = waterTargetMl,
+        )
+        mXpProjectionRepository.setTodayPendingXp(projectedNutritionXp + projectedWaterXp)
     }
 }
 
@@ -1923,39 +1927,6 @@ private fun calculateMealRating(
         rating = rating,
         category = category,
     )
-}
-
-private fun computeDailyXp(
-    protein: DailyXpMacro,
-    carbs: DailyXpMacro,
-    fat: DailyXpMacro,
-    fiber: DailyXpMacro,
-    sugar: DailyXpMacro,
-    calories: DailyXpMacro,
-    maxDailyXp: Int = 40,
-    closeRangeThreshold: Float = 0.08f,
-    curveSharpness: Float = 2f,
-    minDailyXp: Int = -40,
-): Int {
-    val macros = listOf(protein, carbs, fat, fiber, sugar, calories)
-
-    fun relativeError(target: Int, eaten: Int): Float {
-        if (target <= 0) return if (eaten <= 0) 0f else 1f
-        return kotlin.math.abs(eaten - target).toFloat() / target.toFloat()
-    }
-
-    val weightedDistance = macros.sumOf { macro ->
-        val err = relativeError(target = macro.target, eaten = macro.eaten)
-        (err * macro.weight).toDouble()
-    }.toFloat()
-
-    if (weightedDistance <= closeRangeThreshold) {
-        return maxDailyXp
-    }
-
-    val normalized = (2f * kotlin.math.exp(-curveSharpness * weightedDistance) - 1f)
-    val rawXp = normalized * maxDailyXp
-    return rawXp.roundToInt().coerceIn(minDailyXp, maxDailyXp)
 }
 
 private fun calculateScannedQuantity(
