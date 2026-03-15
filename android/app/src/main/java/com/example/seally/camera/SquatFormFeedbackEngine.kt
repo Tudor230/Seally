@@ -112,10 +112,12 @@ class SquatFormFeedbackEngine {
         mLastSmoothedKneeAngle = smoothedKneeAngle
         stabilizeCue(frameCue, frameJoints)
 
+        val hasStartedExerciseMovement =
+            mHasDetectedStartPosition && mCurrentPhase != MovementPhase.STANDING
         val isCorrecting = mPersistedCue != null
         val status = when {
+            !hasStartedExerciseMovement -> ExerciseStatus.READY
             isCorrecting -> ExerciseStatus.ERROR
-            mCurrentPhase == MovementPhase.STANDING -> ExerciseStatus.READY
             else -> ExerciseStatus.ACTIVE
         }
         val debugMinKneeAngle = if (mMinKneeAngleInRep == Float.MAX_VALUE) null else mMinKneeAngleInRep

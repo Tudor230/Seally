@@ -259,8 +259,19 @@ fun MainCalendarContent(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(text = currentMonth.year.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
-                Text(text = currentMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    text = currentMonth.year.toString(), 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = MaterialTheme.colorScheme.primary, 
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = currentMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()), 
+                    style = MaterialTheme.typography.headlineMedium, 
+                    fontWeight = FontWeight.Black, 
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
             Row {
                 IconButton(
@@ -287,13 +298,13 @@ fun MainCalendarContent(
 
         Surface(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(32.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
             tonalElevation = 6.dp,
             shadowElevation = 12.dp,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 DaysOfWeekHeader()
                 HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, pageSpacing = 16.dp) { page ->
                     val month = startMonth.plusMonths((page - startPage).toLong())
@@ -302,7 +313,7 @@ fun MainCalendarContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         DaySummaryCard(
             date = selectedDate, 
@@ -315,8 +326,8 @@ fun MainCalendarContent(
         Spacer(modifier = Modifier.weight(1f))
         
         Surface(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp),
+            shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
             tonalElevation = 2.dp,
             shadowElevation = 8.dp
@@ -324,27 +335,28 @@ fun MainCalendarContent(
             Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(
                     onClick = onOpenPresets, 
-                    modifier = Modifier.weight(0.4f),
+                    modifier = Modifier.weight(0.4f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Presets", fontWeight = FontWeight.Bold)
+                    Text("Presets", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Button(
                     onClick = onOpenPlanner,
-                    modifier = Modifier.weight(0.6f).height(48.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(0.6f).height(52.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Manage Plans", fontWeight = FontWeight.Bold)
+                    Text("Manage Plans", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -353,26 +365,36 @@ fun MainCalendarContent(
 
 @Composable
 fun DaySummaryCard(date: LocalDate, today: LocalDate, workouts: List<ExerciseEntry>, plans: List<ExerciseEntry>, onOpenPlanner: () -> Unit) {
+    // Combine workouts and plans for today to show progress
     val displayExercises = when {
         date.isBefore(today) -> workouts
-        date == today -> if (workouts.isNotEmpty()) workouts else plans
+        date == today -> {
+            // For today, show completed ones and planned ones that are not yet completed
+            // Actually, just showing both grouped by status/preset might be better
+            // But to satisfy "it should update accordingly", let's combine them
+            val completedNames = workouts.map { it.name }.toSet()
+            workouts + plans.filter { it.name !in completedNames }
+        }
         else -> plans
     }
     
     val isCompleted = date.isBefore(today) || (date == today && workouts.isNotEmpty())
+    val hasContent = displayExercises.isNotEmpty()
     
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(28.dp))
             .clickable { onOpenPlanner() },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
         border = androidx.compose.foundation.BorderStroke(
             1.5.dp, 
-            if (isCompleted) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) 
+            if (isCompleted) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) 
+            else if (hasContent) MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
         )
     ) {
@@ -380,88 +402,140 @@ fun DaySummaryCard(date: LocalDate, today: LocalDate, workouts: List<ExerciseEnt
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .background(
                             if (isCompleted) MaterialTheme.colorScheme.primaryContainer 
-                            else MaterialTheme.colorScheme.secondaryContainer, 
+                            else if (hasContent) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant, 
                             CircleShape
                         ), 
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.Event, 
+                        imageVector = if (isCompleted) Icons.Default.CheckCircle 
+                                     else if (hasContent) Icons.Default.DirectionsRun
+                                     else Icons.Default.EventNote, 
                         contentDescription = null, 
-                        tint = if (isCompleted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer, 
-                        modifier = Modifier.size(24.dp)
+                        tint = if (isCompleted) MaterialTheme.colorScheme.onPrimaryContainer 
+                               else if (hasContent) MaterialTheme.colorScheme.onSecondaryContainer
+                               else MaterialTheme.colorScheme.onSurfaceVariant, 
+                        modifier = Modifier.size(26.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())}", 
-                        style = MaterialTheme.typography.titleMedium, 
-                        fontWeight = FontWeight.Bold, 
+                        text = if (date == today) "Today's Routine" else "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())}", 
+                        style = MaterialTheme.typography.titleLarge, 
+                        fontWeight = FontWeight.Black, 
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = when {
-                            date == today -> "Today"
-                            date == today.plusDays(1) -> "Tomorrow"
-                            date == today.minusDays(1) -> "Yesterday"
+                            date == today -> "Keep pushing!"
+                            date == today.plusDays(1) -> "Tomorrow's Plan"
+                            date == today.minusDays(1) -> "Yesterday's Activity"
                             else -> date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
                         }, 
                         style = MaterialTheme.typography.labelMedium, 
                         color = if (isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ChevronRight, 
+                        contentDescription = null, 
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             
             if (displayExercises.isNotEmpty()) {
+                // Group by preset for the resume view too
                 val groupedInSummary = displayExercises.groupBy { it.presetName }
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     groupedInSummary.forEach { (presetName, exercises) ->
-                        Column {
-                            if (presetName != null) {
-                                Text(
-                                    text = presetName.uppercase(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                            }
-                            exercises.forEach { exercise ->
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                                    Box(modifier = Modifier.size(6.dp).background(if (presetName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary, CircleShape))
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = exercise.name, 
-                                        style = MaterialTheme.typography.bodyMedium, 
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        text = "${exercise.value} ${exercise.metric}", 
-                                        style = MaterialTheme.typography.bodyMedium, 
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                if (presetName != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = presetName.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                exercises.forEach { exercise ->
+                                    val isExerciseDone = workouts.any { it.name == exercise.name }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically, 
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isExerciseDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (isExerciseDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = exercise.name, 
+                                            style = MaterialTheme.typography.bodyMedium, 
+                                            fontWeight = if (isExerciseDone) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isExerciseDone) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = "${exercise.value} ${exercise.metric}", 
+                                            style = MaterialTheme.typography.bodyMedium, 
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isExerciseDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             } else {
-                Text(
-                    text = "No workouts planned for this day.", 
-                    style = MaterialTheme.typography.bodyMedium, 
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.FitnessCenter, 
+                        contentDescription = null, 
+                        tint = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Rest Day", 
+                        style = MaterialTheme.typography.titleMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = "No workouts planned. Tap to add one!", 
+                        style = MaterialTheme.typography.labelSmall, 
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
         }
     }
@@ -513,48 +587,78 @@ private fun CalendarSubPageHeader(
 fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> Unit, onEditPreset: (TrainingPresetUiModel) -> Unit, onDeletePreset: (String) -> Unit, onAddPreset: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         CalendarSubPageHeader(
-            title = "My Presets",
+            title = "Training Presets",
             onBackClick = onBackClick,
+            subtitle = "Save and reuse your routines"
         )
         if (presets.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Surface(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                    shape = RoundedCornerShape(32.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                     tonalElevation = 2.dp,
                 ) {
                     Column(
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 28.dp),
+                        modifier = Modifier.padding(horizontal = 40.dp, vertical = 48.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outlineVariant)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("No presets saved yet", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.size(80.dp)
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.padding(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text("No Presets Yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                        Text(
+                            "Create a workout template to quickly plan your training days.", 
+                            style = MaterialTheme.typography.bodyMedium, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 100.dp)) {
+            LazyColumn(
+                modifier = Modifier.weight(1f).padding(horizontal = 20.dp), 
+                verticalArrangement = Arrangement.spacedBy(16.dp), 
+                contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp)
+            ) {
                 items(presets) { preset ->
                     Surface(
-                        modifier = Modifier.fillMaxWidth().clickable { onEditPreset(preset) },
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable { onEditPreset(preset) },
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                        tonalElevation = 2.dp,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        tonalElevation = 3.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ) {
                         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f), RoundedCornerShape(16.dp)), 
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(text = preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(text = "${preset.exercises.size} exercises", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(text = preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(text = "${preset.exercises.size} Exercises", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                }
                             }
-                            IconButton(onClick = { onDeletePreset(preset.id) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                            IconButton(
+                                onClick = { onDeletePreset(preset.id) },
+                                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete")
                             }
                         }
                     }
@@ -562,10 +666,15 @@ fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> U
             }
         }
         Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Button(onClick = onAddPreset, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Create New Preset", fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onAddPreset, 
+                modifier = Modifier.fillMaxWidth().height(60.dp), 
+                shape = RoundedCornerShape(20.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            ) {
+                Icon(Icons.Default.AddCircle, contentDescription = null)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Create New Preset", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -592,14 +701,16 @@ fun PresetEditorPage(
         CalendarSubPageHeader(
             title = if (initialPreset == null) "New Preset" else "Edit Preset",
             onBackClick = onBackClick,
+            subtitle = "Define your template"
         )
         Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
             OutlinedTextField(
                 value = name,
                 onValueChange = onNameChange,
-                label = { Text("Preset Name") },
+                label = { Text("Preset Name", fontWeight = FontWeight.Bold) },
+                placeholder = { Text("e.g., Morning Push, Leg Day") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 singleLine = true,
                 isError = nameError,
                 supportingText = {
@@ -609,19 +720,43 @@ fun PresetEditorPage(
                 },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                )
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(text = "Exercises", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.height(28.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "EXERCISES", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(text = "${draftExercises.size} Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(modifier = Modifier.height(12.dp))
+            
             if (draftExercises.isEmpty()) {
-                Surface(modifier = Modifier.fillMaxWidth().height(100.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                    Box(contentAlignment = Alignment.Center) { Text("No exercises added yet", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(140.dp), 
+                    shape = RoundedCornerShape(24.dp), 
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), 
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) { 
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No exercises added yet", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) 
+                        }
+                    }
                 }
             } else {
                 draftExercises.forEachIndexed { index, entry ->
-                    ExerciseEditItem(entry = entry, onUpdate = { draftExercises[index] = it }, onRemove = { draftExercises.removeAt(index) }, onPickExercise = { onPickExercise(index) })
+                    ExerciseEditItem(
+                        entry = entry, 
+                        onUpdate = { draftExercises[index] = it }, 
+                        onRemove = { draftExercises.removeAt(index) }, 
+                        onPickExercise = { onPickExercise(index) }
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 if (!hasValidExercises) {
@@ -632,22 +767,28 @@ fun PresetEditorPage(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedButton(onClick = { draftExercises.add(ExerciseEntry("", "reps", "")) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+            Spacer(modifier = Modifier.height(20.dp))
+            OutlinedButton(
+                onClick = { draftExercises.add(ExerciseEntry("", "reps", "")) }, 
+                modifier = Modifier.fillMaxWidth().height(52.dp), 
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+            ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Exercise")
+                Text("Add Exercise", fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(120.dp))
         }
         Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Button(
                 onClick = { onSave(name.trim(), draftExercises.toList()) },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp),
                 enabled = canSave,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
             ) {
-                Text("Save Preset", fontWeight = FontWeight.Bold)
+                Text("Save Template", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -700,36 +841,51 @@ fun WorkoutPlannerPage(
                 Surface(
                     onClick = { showPresetPicker = true },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Load from Workout Preset", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(6.dp))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Import from Preset", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Spacer(modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
             }
             
-            Text(text = "Daily Routine", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "TODAY\'S ROUTINE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.weight(1f))
+                if (draftExercises.isNotEmpty()) {
+                    Text(
+                        text = "Clear All", 
+                        style = MaterialTheme.typography.labelMedium, 
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { onClear() }
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
             
             if (draftExercises.isEmpty()) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(120.dp), 
-                    shape = RoundedCornerShape(24.dp), 
+                    modifier = Modifier.fillMaxWidth().height(160.dp), 
+                    shape = RoundedCornerShape(28.dp), 
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), 
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                 ) {
                     Box(contentAlignment = Alignment.Center) { 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No exercises planned yet", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium) 
+                            Icon(Icons.Default.EventAvailable, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Your workout is empty", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) 
+                            Text("Start adding exercises or use a preset", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium) 
                         }
                     }
                 }
@@ -737,10 +893,16 @@ fun WorkoutPlannerPage(
                 // Render grouped exercises
                 groupedExercises.forEach { (presetName, exercises) ->
                     if (presetName != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp, top = 4.dp)) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = presetName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Surface(
+                            modifier = Modifier.padding(bottom = 8.dp, top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = presetName.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                     
@@ -760,47 +922,31 @@ fun WorkoutPlannerPage(
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             
-            Row {
-                OutlinedButton(
-                    onClick = { draftExercises.add(ExerciseEntry("", "reps", "")) }, 
-                    modifier = Modifier.weight(1f).height(48.dp), 
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Manual")
-                }
+            OutlinedButton(
+                onClick = { draftExercises.add(ExerciseEntry("", "reps", "")) }, 
+                modifier = Modifier.fillMaxWidth().height(52.dp), 
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Manual Exercise", fontWeight = FontWeight.Bold)
             }
             
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            if (draftExercises.isNotEmpty()) {
-                TextButton(
-                    onClick = onClear, 
-                    modifier = Modifier.fillMaxWidth(), 
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { 
-                    Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Clear All Exercises") 
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(120.dp))
         }
         
         Box(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Button(
                 onClick = onSave, 
-                modifier = Modifier.fillMaxWidth().height(56.dp), 
+                modifier = Modifier.fillMaxWidth().height(60.dp), 
                 enabled = canSavePlan, 
-                shape = RoundedCornerShape(18.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+                shape = RoundedCornerShape(20.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
             ) { 
-                Text("Confirm Daily Plan", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) 
+                Text("Confirm Daily Plan", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium) 
             }
         }
     }
@@ -809,29 +955,30 @@ fun WorkoutPlannerPage(
         ModalBottomSheet(
             onDismissRequest = { showPresetPicker = false },
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            tonalElevation = 8.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
-                Text(text = "Apply Training Preset", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.padding(vertical = 16.dp))
+            Column(modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 48.dp)) {
+                Text(text = "Choose Preset", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, modifier = Modifier.padding(vertical = 16.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(presets) { preset ->
                         Surface(
                             onClick = { onApplyPreset(preset); showPresetPicker = false },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         ) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
+                                Box(modifier = Modifier.size(44.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.FitnessCenter, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(24.dp))
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = preset.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                                    Text(text = "${preset.exercises.size} exercises", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                    Text(text = preset.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold)
+                                    Text(text = "${preset.exercises.size} Exercises", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 }
-                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -847,67 +994,61 @@ fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, on
     val valueError = entry.value.isNotBlank() && (entry.value.toDoubleOrNull()?.let { it > 0.0 } != true)
     Surface(
         modifier = Modifier.fillMaxWidth(), 
-        shape = RoundedCornerShape(20.dp), 
+        shape = RoundedCornerShape(24.dp), 
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), 
-        tonalElevation = 2.dp, 
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        tonalElevation = 3.dp, 
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     onClick = onPickExercise, 
                     modifier = Modifier.weight(1f), 
-                    shape = RoundedCornerShape(14.dp), 
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), 
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    shape = RoundedCornerShape(16.dp), 
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), 
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                 ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(10.dp))
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = if (entry.name.isBlank()) "Select Exercise..." else entry.name, 
-                            style = MaterialTheme.typography.bodyMedium, 
+                            style = MaterialTheme.typography.bodyLarge, 
                             color = if (entry.name.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface, 
-                            fontWeight = if (entry.name.isBlank()) FontWeight.Normal else FontWeight.Bold,
+                            fontWeight = if (entry.name.isBlank()) FontWeight.Medium else FontWeight.Black,
                             maxLines = 1
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) { 
-                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) 
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onRemove, 
+                    modifier = Modifier.size(40.dp),
+                    colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f))
+                ) { 
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp)) 
                 }
             }
-            if (nameError) {
-                Text(
-                    text = "Select an exercise name.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelSmall,
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = entry.value,
+                    onValueChange = { onUpdate(entry.copy(value = sanitizeInput(it))) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    label = { Text("Quantity") },
+                    suffix = { Text(entry.metric, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Black),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            OutlinedTextField(
-                value = entry.value,
-                onValueChange = { onUpdate(entry.copy(value = sanitizeInput(it))) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                suffix = { Text(entry.metric, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
-                singleLine = true,
-                isError = valueError,
-                supportingText = {
-                    if (valueError) {
-                        Text("Enter a value greater than 0.")
-                    }
-                },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.seally.camera
 
 import android.Manifest
+import android.os.Build
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -50,7 +51,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,8 +80,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import kotlinx.coroutines.delay
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -110,7 +118,7 @@ private val ColorJoint = Color(0xFFFFFF00)
 fun CameraScreen(
     modifier: Modifier = Modifier,
     mViewModel: CameraViewModel = viewModel(),
-    mShowExerciseGuideOnEntry: Boolean = false,
+    mOnSessionFinished: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -119,7 +127,12 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mHasShownEntryGuide by remember { mutableStateOf(false) }
+    var mIsGuideVisible by remember(uiState.mSelectedExercise) {
+        mutableStateOf(false)
+    }
+    var mCelebrationSummary by remember { mutableStateOf<ExerciseCompletionSummary?>(null) }
+    var mShouldShowExerciseCelebration by remember { mutableStateOf(false) }
+    var mShouldShowCompletionDialog by remember { mutableStateOf(false) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -195,10 +208,24 @@ fun CameraScreen(
         mErrorSpeechAnnouncer.onErrorMessage(mMessageToAnnounce)
     }
 
+    LaunchedEffect(mIsGuideVisible) {
+        mViewModel.setFormCheckEnabled(!mIsGuideVisible)
+    }
+
     DisposableEffect(mErrorSpeechAnnouncer) {
         onDispose {
             mErrorSpeechAnnouncer.release()
         }
+    }
+
+    LaunchedEffect(uiState.mCompletedSessionSummary?.mCompletionId) {
+        val summary = uiState.mCompletedSessionSummary ?: return@LaunchedEffect
+        mCelebrationSummary = summary
+        mShouldShowCompletionDialog = false
+        mShouldShowExerciseCelebration = true
+        delay(2000L)
+        mShouldShowExerciseCelebration = false
+        mShouldShowCompletionDialog = true
     }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
@@ -351,9 +378,11 @@ fun CameraScreen(
         FeedbackContent(
             feedback = uiState.mFormFeedback,
             exerciseType = uiState.mSelectedExercise,
+            expectedGoal = uiState.mExpectedGoal,
             onOpenGuide = {
-                context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
+                mIsGuideVisible = true
             },
+            onFinishSession = mViewModel::completeCurrentExerciseSession,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -363,8 +392,36 @@ fun CameraScreen(
 
 
         // Calibration Guide Overlay
-        if (uiState.mFormFeedback.mStatus == ExerciseStatus.INITIALIZING || uiState.mFormFeedback.mStatus == ExerciseStatus.READY) {
+        if (!mIsGuideVisible && (uiState.mFormFeedback.mStatus == ExerciseStatus.INITIALIZING || uiState.mFormFeedback.mStatus == ExerciseStatus.READY)) {
             CalibrationOverlay(status = uiState.mFormFeedback.mStatus)
+        }
+
+        if (mIsGuideVisible) {
+            val (mGuideTitle, mGuideAssetPath) = guideConfigForExercise(uiState.mSelectedExercise)
+            ExerciseGuideScreen(
+                mTitle = mGuideTitle,
+                mImageAssetPath = mGuideAssetPath,
+                mOnConfirm = { mIsGuideVisible = false },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        if (mShouldShowExerciseCelebration) {
+            FullScreenExerciseSealCelebrationOverlay(
+                performanceTier = mCelebrationSummary?.mPerformanceTier,
+            )
+        }
+
+        if (mShouldShowCompletionDialog && mCelebrationSummary != null) {
+            ExerciseCompletionDialog(
+                summary = mCelebrationSummary!!,
+                onDismiss = {
+                    mShouldShowCompletionDialog = false
+                    mCelebrationSummary = null
+                    mViewModel.consumeCompletedSessionSummary()
+                    mOnSessionFinished()
+                },
+            )
         }
     }
 }
@@ -433,7 +490,9 @@ private fun CalibrationOverlay(status: ExerciseStatus) {
 private fun FeedbackContent(
     feedback: FormFeedback,
     exerciseType: ExerciseType,
+    expectedGoal: Int?,
     onOpenGuide: () -> Unit,
+    onFinishSession: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val exerciseLabel = when (exerciseType) {
@@ -490,18 +549,24 @@ private fun FeedbackContent(
 
             // Big Counter
             val counterValue = when (exerciseType) {
-                ExerciseType.PLANK -> formatDuration(feedback.mHoldDurationMs)
+                ExerciseType.PLANK -> formatDuration(feedback.mMaxHoldDurationMs)
                 else -> feedback.mRepCount.toString()
             }
             val counterLabel = when (exerciseType) {
                 ExerciseType.PLANK -> "TIME"
                 else -> "REPS"
             }
+            val goalValue = expectedGoal?.let {
+                when (exerciseType) {
+                    ExerciseType.PLANK -> formatDuration(it * 1000L)
+                    ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> it.toString()
+                }
+            }
 
             Column(horizontalAlignment = Alignment.End) {
                 if (exerciseType == ExerciseType.PLANK) {
                     Text(
-                        text = "SAVED ${formatDuration(feedback.mMaxHoldDurationMs)}",
+                        text = "LIVE ${formatDuration(feedback.mHoldDurationMs)}",
                         color = Color.White.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -512,11 +577,19 @@ private fun FeedbackContent(
                     style = MaterialTheme.typography.labelSmall
                 )
                 Text(
-                    text = counterValue,
+                    text = if (goalValue != null) "$counterValue / $goalValue" else counterValue,
                     color = Color.White,
                     style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.Black
                 )
+                if (goalValue != null) {
+                    Text(
+                        text = "Target unlocked when you hit $goalValue",
+                        color = ColorSuccess,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
 
@@ -573,6 +646,23 @@ private fun FeedbackContent(
                         )
                     }
                 }
+
+                Button(
+                    onClick = onFinishSession,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E5FF),
+                        contentColor = Color.Black,
+                    ),
+                ) {
+                    Text(
+                        text = "FINISH EXERCISE",
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -585,14 +675,109 @@ private fun formatDuration(durationMs: Long): String {
     return "%02d:%02d".format(minutes, seconds)
 }
 
-private fun createExerciseGuideIntent(context: Context, exerciseType: ExerciseType): Intent {
-    val guideActivityClass = when (exerciseType) {
-        ExerciseType.SQUAT -> SquatGuideActivity::class.java
-        ExerciseType.PLANK -> PlankGuideActivity::class.java
-        ExerciseType.PULLUP -> PullupGuideActivity::class.java
-        ExerciseType.PUSHUP -> PushupGuideActivity::class.java
+@Composable
+private fun FullScreenExerciseSealCelebrationOverlay(performanceTier: ExercisePerformanceTier?) {
+    val context = LocalContext.current
+    val imagePath = when (performanceTier) {
+        ExercisePerformanceTier.GOOD -> "file:///android_asset/icons/seal_animation_GoodFood.gif"
+        ExercisePerformanceTier.MEDIUM -> "file:///android_asset/icons/mehFoodSeal.png"
+        ExercisePerformanceTier.BAD -> "file:///android_asset/icons/notHeakthyFoodSeal.png"
+        null -> null
     }
-    return Intent(context, guideActivityClass)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (imagePath == null) {
+            Text(
+                text = "🦭",
+                style = MaterialTheme.typography.displayLarge,
+            )
+            return@Box
+        }
+
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(imagePath)
+                .decoderFactory(
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        ImageDecoderDecoder.Factory()
+                    } else {
+                        GifDecoder.Factory()
+                    },
+                )
+                .build(),
+            contentDescription = "Exercise celebration seal",
+            modifier = Modifier.size(150.dp),
+        )
+    }
+}
+
+@Composable
+private fun ExerciseCompletionDialog(
+    summary: ExerciseCompletionSummary,
+    onDismiss: () -> Unit,
+) {
+    val formattedActualValue = when (summary.mMetric.lowercase()) {
+        "reps" -> summary.mActualValue.toInt().toString()
+        "seconds" -> formatDuration(summary.mActualValue.toLong() * 1000L)
+        "distance" -> String.format("%.1f", summary.mActualValue)
+        else -> String.format("%.1f", summary.mActualValue)
+    }
+    val performanceLabel = when (summary.mPerformanceTier) {
+        ExercisePerformanceTier.GOOD -> "Outstanding performance!"
+        ExercisePerformanceTier.MEDIUM -> "Solid work! Keep pushing!"
+        ExercisePerformanceTier.BAD -> "Great consistency! Keep going!"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Workout complete") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "You did $formattedActualValue ${summary.mMetric} on ${summary.mExerciseName}.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "Goal: ${summary.mExpectedGoal} ${summary.mMetric}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+                Text(
+                    text = "+${summary.mXpAwarded} XP added instantly.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ColorSuccess,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = performanceLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Awesome")
+            }
+        },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color(0xFF262626),
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+    )
+}
+
+private fun guideConfigForExercise(exerciseType: ExerciseType): Pair<String, String> {
+    return when (exerciseType) {
+        ExerciseType.SQUAT -> "Squat" to "img/squat.png"
+        ExerciseType.PLANK -> "Plank" to "img/plank.png"
+        ExerciseType.PULLUP -> "Pull-up" to "img/pullup.png"
+        ExerciseType.PUSHUP -> "Push-up" to "img/pushup.png"
+    }
 }
 
 private const val TARGET_CAMERA_FPS = 30

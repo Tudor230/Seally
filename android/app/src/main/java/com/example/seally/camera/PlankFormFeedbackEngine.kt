@@ -80,17 +80,23 @@ class PlankFormFeedbackEngine {
 
         val isGoodForm = cue == null
         updateTimer(isGoodForm = isGoodForm, frameTimestampMs = frameTimestampMs)
+        val hasStartedExerciseMovement = isInPlankPosition
+        val isCorrecting = hasStartedExerciseMovement && !isGoodForm
 
         return FormFeedback(
             mPrimaryCue = cue,
             mSpeechCue = speechCue,
-            mStatus = if (isGoodForm) ExerciseStatus.ACTIVE else ExerciseStatus.ERROR,
+            mStatus = when {
+                !hasStartedExerciseMovement -> ExerciseStatus.READY
+                isGoodForm -> ExerciseStatus.ACTIVE
+                else -> ExerciseStatus.ERROR
+            },
             mCurrentPhase = MovementPhase.STANDING,
             mHoldDurationMs = mAccumulatedGoodFormMs,
             mMaxHoldDurationMs = mMaxGoodFormMs,
-            mIsCorrecting = !isGoodForm,
-            mProblematicJoints = joints,
-            mErrorMessage = speechCue ?: cue,
+            mIsCorrecting = isCorrecting,
+            mProblematicJoints = if (hasStartedExerciseMovement) joints else emptyList(),
+            mErrorMessage = if (hasStartedExerciseMovement) speechCue ?: cue else null,
         )
     }
 

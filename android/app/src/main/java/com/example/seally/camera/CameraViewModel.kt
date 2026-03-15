@@ -11,8 +11,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.livekit.LandmarkPacketEncoder
 import com.example.seally.livekit.LiveKitPublisher
+import com.example.seally.xp.XpCalculators
+import com.example.seally.xp.XpRepository
+import com.example.seally.xp.XpRules
 import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +26,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import kotlin.math.roundToInt
+
+data class ExerciseCompletionSummary(
+    val mExerciseType: ExerciseType,
+    val mExerciseName: String,
+    val mMetric: String,
+    val mActualValue: Double,
+    val mExpectedGoal: Int,
+    val mXpAwarded: Int,
+    val mPerformanceTier: ExercisePerformanceTier,
+    val mCompletionId: Long,
+    val mLogId: String,
+)
+
+enum class ExercisePerformanceTier {
+    GOOD,
+    MEDIUM,
+    BAD,
+}
 
 data class CameraUiState(
     val mHasCameraPermission: Boolean = false,
@@ -38,6 +61,9 @@ data class CameraUiState(
     val mLiveKitStatus: String = "LiveKit idle",
     val mRoomCode: String = "",
     val mIsLiveKitConnected: Boolean = false,
+    val mIsFormCheckEnabled: Boolean = false,
+    val mExpectedGoal: Int? = null,
+    val mCompletedSessionSummary: ExerciseCompletionSummary? = null,
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,6 +86,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mHasAttemptedWarmup: Boolean = false
     private val mLiveKitPublisher = LiveKitPublisher(getApplication())
     private val mExerciseLogRepository = ExerciseLogRepository(getApplication())
+    private val mXpRepository = XpRepository(getApplication())
     private var mIsLiveKitConnecting: Boolean = false
     private var mLandmarkSequence: Long = 0L
     private var mLastLandmarkSentAtMs: Long = 0L
@@ -100,7 +127,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mPlankFormFeedbackEngine.reset()
             mPullUpFormFeedbackEngine.reset()
             mPushUpFormFeedbackEngine.reset()
-            mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
+            mUiState.update {
+                it.copy(
+                    mFormFeedback = FormFeedback(),
+                    mIsFormCheckEnabled = false,
+                )
+            }
             mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (no camera permission)") }
             return
         }
@@ -237,18 +269,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        if (mUiState.value.mIsStartupCameraLoading) {
-            mUiState.update { it.copy(mIsStartupCameraLoading = false) }
-        }
-
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val isQuarterTurn = rotationDegrees == 90 || rotationDegrees == 270
         val frameWidth = if (isQuarterTurn) imageProxy.height else imageProxy.width
         val frameHeight = if (isQuarterTurn) imageProxy.width else imageProxy.height
 
         val currentState = mUiState.value
+        if (currentState.mIsStartupCameraLoading) {
+            mUiState.update { it.copy(mIsStartupCameraLoading = false) }
+        }
         if (currentState.mFrameWidth != frameWidth || currentState.mFrameHeight != frameHeight) {
             mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
+        }
+        if (!currentState.mIsFormCheckEnabled) {
+            imageProxy.close()
+            return
         }
 
         runCatching {
@@ -306,6 +341,47 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
+                mIsFormCheckEnabled = false,
+                mExpectedGoal = null,
+                mCompletedSessionSummary = null,
+            )
+        }
+    }
+
+    fun startExerciseSession(mExerciseType: ExerciseType, mExpectedGoal: Int) {
+        val currentState = mUiState.value
+        persistCurrentExerciseSessionIfNeeded(currentState)
+        resetExerciseEnginesAndFeedback()
+        mUiState.update {
+            it.copy(
+                mSelectedExercise = mExerciseType,
+                mIsFormCheckEnabled = false,
+                mExpectedGoal = mExpectedGoal.coerceAtLeast(1),
+                mCompletedSessionSummary = null,
+                mErrorMessage = null,
+            )
+        }
+    }
+
+    fun setFormCheckEnabled(isEnabled: Boolean) {
+        val currentState = mUiState.value
+        if (currentState.mIsFormCheckEnabled == isEnabled) return
+
+        if (isEnabled) {
+            clearPoseOverlay()
+            mUiState.update {
+                it.copy(
+                    mIsFormCheckEnabled = true,
+                    mErrorMessage = null,
+                )
+            }
+            return
+        }
+
+        mUiState.update {
+            it.copy(
+                mIsFormCheckEnabled = false,
+                mErrorMessage = null,
             )
         }
     }
@@ -322,6 +398,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     ExerciseType.PULLUP -> ExerciseType.PUSHUP
                     ExerciseType.PUSHUP -> ExerciseType.SQUAT
                 },
+                mIsFormCheckEnabled = false,
+                mExpectedGoal = null,
+                mCompletedSessionSummary = null,
             )
         }
     }
@@ -329,40 +408,161 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun persistExerciseSessionOnExit() {
         persistCurrentExerciseSessionIfNeeded(mUiState.value)
         resetExerciseEnginesAndFeedback()
+        mUiState.update {
+            it.copy(
+                mIsFormCheckEnabled = false,
+                mExpectedGoal = null,
+                mCompletedSessionSummary = null,
+            )
+        }
+    }
+
+    fun completeCurrentExerciseSession() {
+        val currentState = mUiState.value
+        val sessionData = buildExerciseSessionData(currentState)
+        if (sessionData == null) {
+            val expectedMetric = metricLabelForExercise(currentState.mSelectedExercise)
+            mUiState.update {
+                it.copy(mErrorMessage = "Complete at least 1 $expectedMetric before finishing.")
+            }
+            return
+        }
+
+        val expectedGoal = (currentState.mExpectedGoal ?: sessionData.mMeasuredUnits).coerceAtLeast(1)
+        val awardedXp = calculateExerciseXp(
+            exerciseType = currentState.mSelectedExercise,
+            measuredUnits = sessionData.mMeasuredUnits,
+            expectedUnits = expectedGoal,
+        )
+        val performanceTier = calculatePerformanceTier(
+            measuredUnits = sessionData.mMeasuredUnits,
+            expectedUnits = expectedGoal,
+        )
+        val completionId = SystemClock.elapsedRealtime()
+
+        viewModelScope.launch {
+            try {
+                val logId = mExerciseLogRepository.addLog(
+                    exerciseName = sessionData.mExerciseName,
+                    quantity = sessionData.mQuantity,
+                    metric = sessionData.mMetric,
+                    date = LocalDate.now().toString(),
+                )
+                mXpRepository.addXp(awardedXp)
+                mUiState.update {
+                    it.copy(
+                        mCompletedSessionSummary = ExerciseCompletionSummary(
+                            mExerciseType = currentState.mSelectedExercise,
+                            mExerciseName = sessionData.mExerciseName,
+                            mMetric = sessionData.mMetric,
+                            mActualValue = sessionData.mQuantity,
+                            mExpectedGoal = expectedGoal,
+                            mXpAwarded = awardedXp,
+                            mPerformanceTier = performanceTier,
+                            mCompletionId = completionId,
+                            mLogId = logId,
+                        ),
+                        mExpectedGoal = null,
+                        mErrorMessage = null,
+                    )
+                }
+                resetExerciseEnginesAndFeedback()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Log.e(mTag, "Failed to complete exercise session", error)
+                mUiState.update {
+                    it.copy(
+                        mErrorMessage = error.message ?: "Unable to finish exercise. Please try again.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeCompletedSessionSummary() {
+        mUiState.update { it.copy(mCompletedSessionSummary = null) }
     }
 
     private fun persistCurrentExerciseSessionIfNeeded(state: CameraUiState) {
-        val exerciseType = state.mSelectedExercise
-        val feedback = state.mFormFeedback
-        val quantity = when (exerciseType) {
-            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> feedback.mRepCount.toDouble()
-            ExerciseType.PLANK -> feedback.mMaxHoldDurationMs / 1000.0
-        }
-        if (quantity <= 0.0) return
-
-        val metric = when (exerciseType) {
-            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> "reps"
-            ExerciseType.PLANK -> "seconds"
-        }
-        val exerciseName = when (exerciseType) {
-            ExerciseType.SQUAT -> "Squat"
-            ExerciseType.PLANK -> "Plank"
-            ExerciseType.PULLUP -> "Pull-up"
-            ExerciseType.PUSHUP -> "Push-up"
-        }
-        val date = LocalDate.now().toString()
+        val sessionData = buildExerciseSessionData(state) ?: return
 
         viewModelScope.launch {
             runCatching {
                 mExerciseLogRepository.addLog(
-                    exerciseName = exerciseName,
-                    quantity = quantity,
-                    metric = metric,
-                    date = date,
+                    exerciseName = sessionData.mExerciseName,
+                    quantity = sessionData.mQuantity,
+                    metric = sessionData.mMetric,
+                    date = LocalDate.now().toString(),
                 )
             }.onFailure { error ->
                 Log.e(mTag, "Failed to persist exercise session", error)
             }
+        }
+    }
+
+    private fun buildExerciseSessionData(state: CameraUiState): ExerciseSessionData? {
+        val measuredUnits = when (state.mSelectedExercise) {
+            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> state.mFormFeedback.mRepCount
+            ExerciseType.PLANK -> (state.mFormFeedback.mMaxHoldDurationMs / 1000L).toInt()
+        }.coerceAtLeast(0)
+        if (measuredUnits <= 0) return null
+
+        return ExerciseSessionData(
+            mExerciseName = exerciseLabelForExercise(state.mSelectedExercise),
+            mMetric = metricLabelForExercise(state.mSelectedExercise),
+            mQuantity = measuredUnits.toDouble(),
+            mMeasuredUnits = measuredUnits,
+        )
+    }
+
+    private fun calculateExerciseXp(
+        exerciseType: ExerciseType,
+        measuredUnits: Int,
+        expectedUnits: Int,
+    ): Int {
+        val safeMeasuredUnits = measuredUnits.coerceAtLeast(0)
+        val safeExpectedUnits = expectedUnits.coerceAtLeast(1)
+        val measuredXp = baseXpForUnits(exerciseType = exerciseType, units = safeMeasuredUnits)
+        if (safeMeasuredUnits >= safeExpectedUnits) return measuredXp
+
+        return (measuredXp * UNDERPERFORM_XP_MULTIPLIER)
+            .roundToInt()
+            .coerceAtLeast(1)
+    }
+
+    private fun baseXpForUnits(exerciseType: ExerciseType, units: Int): Int {
+        val safeUnits = units.coerceAtLeast(0)
+        return when (exerciseType) {
+            ExerciseType.PLANK -> XpCalculators.totalPlankXpForSeconds(safeUnits)
+            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> safeUnits * XpRules.XP_PER_REP
+        }
+    }
+
+    private fun calculatePerformanceTier(
+        measuredUnits: Int,
+        expectedUnits: Int,
+    ): ExercisePerformanceTier {
+        val ratio = measuredUnits.toFloat() / expectedUnits.coerceAtLeast(1).toFloat()
+        return when {
+            ratio >= 1f -> ExercisePerformanceTier.GOOD
+            ratio >= 0.7f -> ExercisePerformanceTier.MEDIUM
+            else -> ExercisePerformanceTier.BAD
+        }
+    }
+
+    private fun metricLabelForExercise(exerciseType: ExerciseType): String {
+        return when (exerciseType) {
+            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> "reps"
+            ExerciseType.PLANK -> "seconds"
+        }
+    }
+
+    private fun exerciseLabelForExercise(exerciseType: ExerciseType): String {
+        return when (exerciseType) {
+            ExerciseType.SQUAT -> "Squat"
+            ExerciseType.PLANK -> "Plank"
+            ExerciseType.PULLUP -> "Pull-up"
+            ExerciseType.PUSHUP -> "Push-up"
         }
     }
 
@@ -528,6 +728,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     companion object {
+        private const val UNDERPERFORM_XP_MULTIPLIER = 0.4f
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
         private const val LANDMARK_SEND_MIN_INTERVAL_MS = 33L
         private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
@@ -535,3 +736,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val LIVEKIT_STATUS_UPDATE_EVERY_FRAMES = 45L
     }
 }
+
+private data class ExerciseSessionData(
+    val mExerciseName: String,
+    val mMetric: String,
+    val mQuantity: Double,
+    val mMeasuredUnits: Int,
+)

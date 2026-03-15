@@ -115,6 +115,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                         quantity = entry.quantity,
                         metric = entry.metric,
                         date = dateString,
+                        presetName = entry.presetName,
                     )
                 }
                 completionRepository.setCompleted(dateString, true)
@@ -148,6 +149,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                         quantity = quantity,
                         metric = entry.metric,
                         date = dateString,
+                        presetName = entry.presetName,
                     )
                 }
             } else {
@@ -158,6 +160,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                             exerciseName = entry.name,
                             metric = entry.metric,
                             quantity = quantity,
+                            presetName = entry.presetName,
                         )
                     },
                 )
@@ -237,6 +240,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                         quantity = plan.quantity,
                         metric = plan.metric,
                         date = plan.date,
+                        presetName = plan.presetName,
                     )
                 }
             }
@@ -292,6 +296,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                     name = entry.exerciseName,
                     metric = metric,
                     value = formatMetricValue(entry.quantity),
+                    presetName = entry.presetName,
                 )
             }
             .groupBy(keySelector = { it.first }, valueTransform = { it.second })
@@ -335,6 +340,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
             metric = resolvedMetric,
             value = formatMetricValue(quantity),
             sourceLogId = id,
+            presetName = presetName,
         )
     }
 

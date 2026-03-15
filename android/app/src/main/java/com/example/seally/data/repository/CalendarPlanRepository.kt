@@ -10,6 +10,7 @@ data class CalendarPlanInput(
     val exerciseName: String,
     val metric: String,
     val quantity: Double,
+    val presetName: String? = null,
 )
 
 class CalendarPlanRepository(context: Context) {
@@ -32,6 +33,7 @@ class CalendarPlanRepository(context: Context) {
                     metric = entry.metric,
                     quantity = entry.quantity,
                     sortOrder = index,
+                    presetName = entry.presetName,
                 )
             },
         )

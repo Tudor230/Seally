@@ -192,12 +192,14 @@ class PullUpFormFeedbackEngine {
 
         stabilizeCue(frameCue, frameJoints)
         val isCorrecting = mPersistedCue != null
+        val hasStartedExerciseMovement =
+            mHasDetectedStartPosition && mPhase != PullUpPhase.DEAD_HANG
         return FormFeedback(
             mPrimaryCue = mPersistedCue,
             mSpeechCue = speechCue,
             mStatus = when {
+                !hasStartedExerciseMovement -> ExerciseStatus.READY
                 isCorrecting -> ExerciseStatus.ERROR
-                !mHasDetectedStartPosition || mPhase == PullUpPhase.DEAD_HANG -> ExerciseStatus.READY
                 else -> ExerciseStatus.ACTIVE
             },
             mRepCount = mRepCount,

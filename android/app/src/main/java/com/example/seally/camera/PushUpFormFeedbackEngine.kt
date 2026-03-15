@@ -137,10 +137,12 @@ class PushUpFormFeedbackEngine {
         mLastSmoothedElbowAngle = smoothedElbowAngle
         stabilizeCue(frameCue, frameJoints)
 
+        val hasStartedExerciseMovement =
+            mHasDetectedStartPosition && mHasAttemptedRepInCurrentCycle
         val isCorrecting = mPersistedCue != null
         val status = when {
+            !hasStartedExerciseMovement -> ExerciseStatus.READY
             isCorrecting -> ExerciseStatus.ERROR
-            mCurrentPhase == MovementPhase.STANDING -> ExerciseStatus.READY
             else -> ExerciseStatus.ACTIVE
         }
         return FormFeedback(
