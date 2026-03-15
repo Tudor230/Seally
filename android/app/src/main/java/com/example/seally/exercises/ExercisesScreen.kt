@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
@@ -26,8 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
 import com.example.seally.camera.CameraScreen
 import com.example.seally.camera.CameraViewModel
@@ -168,9 +165,6 @@ fun ExercisesScreen(
     val mExerciseLogRepository = remember(context) { ExerciseLogRepository(context.applicationContext) }
     val mTodayDate = remember { LocalDate.now().toString() }
     val mTodayWorkout = mExerciseLogRepository.observeByDate(mTodayDate).collectAsState(initial = emptyList()).value
-    val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/seals/muscles.png")
-        .build()
 
     Box(
         modifier = modifier.fillMaxSize()
@@ -268,16 +262,6 @@ fun ExercisesScreen(
             }
         }
 
-        // Seal/character - consistent anchoring
-        AsyncImage(
-            model = musclesImageRequest,
-            contentDescription = "Seal",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxHeight(0.75f)
-                .padding(bottom = 20.dp)
-        )
     }
 }
 

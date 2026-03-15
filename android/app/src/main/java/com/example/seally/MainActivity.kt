@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -162,8 +163,19 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     var profileStartingDestination by rememberSaveable { mutableStateOf(com.example.seally.profile.ProfileDestination.PROFILE) }
     val shouldShowSealCelebrationOverlay = nutritionViewModel.mShouldShowSealCelebration
     var lastBackPressTimestamp by remember { mutableLongStateOf(0L) }
+    val singletonSealImageRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data("file:///android_asset/seals/muscles.png")
+            .build()
+    }
 
     val currentDestination = AppDestinations.entries[pagerState.currentPage]
+    val shouldShowSingletonSeal = !shouldShowProfile && when (currentDestination) {
+        AppDestinations.HOME -> true
+        AppDestinations.NUTRITION -> shouldShowBottomBarForNutrition
+        AppDestinations.EXERCISES -> shouldShowBottomBarForExercises
+        AppDestinations.GOALS -> false
+    }
 
     BackHandler {
         if (shouldShowProfile) {
@@ -307,6 +319,18 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                     }
                 }
             }
+        }
+
+        if (shouldShowSingletonSeal) {
+            AsyncImage(
+                model = singletonSealImageRequest,
+                contentDescription = "Seal Character",
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxHeight(0.75f)
+                
+
+            )
         }
 
         if (shouldShowSealCelebrationOverlay) {

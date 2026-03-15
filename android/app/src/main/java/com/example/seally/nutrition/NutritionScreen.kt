@@ -444,9 +444,6 @@ fun NutritionScreen(
         NutritionPage.Water -> "backgrounds/water_trackpng.png"
         NutritionPage.Camera -> "backgrounds/form_validator.png"
     }
-    val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/seals/muscles.png")
-        .build()
 
     BackHandler(
         enabled = mViewModel.canNavigateBackInNutrition(),
@@ -538,18 +535,6 @@ fun NutritionScreen(
                     )
                 }
             }
-        }
-
-        if (currentPage == NutritionPage.Kitchen) {
-            AsyncImage(
-                model = musclesImageRequest,
-                contentDescription = "Seal Character",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxHeight(0.75f)
-                    .padding(bottom = 20.dp)
-            )
         }
 
     }
