@@ -84,7 +84,7 @@ fun CalendarScreen(
         mExerciseLogs.toWorkoutMap(mExerciseCatalog)
     }
     var isEntryDialogOpen by rememberSaveable { mutableStateOf(false) }
-    val draftExercises = remember { mutableStateListOf<WorkoutEntry>() }
+    val draftExercises = remember { mutableStateListOf<ExerciseEntry>() }
 
     val pageCount = 1200
     val startPage = pageCount / 2
