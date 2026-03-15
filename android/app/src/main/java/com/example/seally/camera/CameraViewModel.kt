@@ -336,7 +336,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val feedback = state.mFormFeedback
         val quantity = when (exerciseType) {
             ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> feedback.mRepCount.toDouble()
-            ExerciseType.PLANK -> feedback.mHoldDurationMs / 1000.0
+            ExerciseType.PLANK -> feedback.mMaxHoldDurationMs / 1000.0
         }
         if (quantity <= 0.0) return
 

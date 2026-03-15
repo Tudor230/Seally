@@ -5,9 +5,10 @@ data class UserProfile(
     val heightCm: Int? = null,
     val weightKg: Float? = null,
     val goalWeightKg: Float? = null,
+    val age: Int? = null,
+    val gender: String = "",
     val activityType: String = "",
     val workoutDaysPerWeek: Int? = null,
-    val journeyGoal: String = "",
     val waterTargetMl: Int? = null,
     val onboardingCompleted: Boolean = false,
 )

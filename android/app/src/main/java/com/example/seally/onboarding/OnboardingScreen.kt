@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.goals.GoalsViewModel
 import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.UserProfile
 import com.example.seally.ui.components.AppScreenBackground
@@ -36,7 +37,7 @@ private enum class OnboardingStep {
     WELCOME,
     PROFILE,
     ACTIVITY,
-    JOURNEY,
+    DEMOGRAPHICS,
     SUMMARY,
 }
 
@@ -47,17 +48,11 @@ private data class ActivityLevel(
 )
 
 private val mActivityLevels = listOf(
-    ActivityLevel("Sedentary", "Little to no exercise, desk job", 28f),
-    ActivityLevel("Lightly Active", "Light exercise 1-3 days/week", 30f),
-    ActivityLevel("Moderately Active", "Moderate exercise 3-5 days/week", 32f),
-    ActivityLevel("Very Active", "Hard exercise 6-7 days/week", 35f),
-    ActivityLevel("Extra Active", "Very hard exercise, physical job", 37f)
-)
-
-private val mJourneyOptions = listOf(
-    "Lose weight",
-    "Gain weight",
-    "Maintain weight",
+    ActivityLevel("Sedentary", "Little to no exercise, desk job", 1.2f),
+    ActivityLevel("Lightly Active", "Light exercise 1-3 days/week", 1.375f),
+    ActivityLevel("Moderately Active", "Moderate exercise 3-5 days/week", 1.55f),
+    ActivityLevel("Very Active", "Hard exercise 6-7 days/week", 1.725f),
+    ActivityLevel("Extra Active", "Very hard exercise, physical job", 1.9f)
 )
 
 @OptIn(ExperimentalAnimationApi::class, ExperimentalMaterial3Api::class)
@@ -68,6 +63,7 @@ fun OnboardingScreen(
 ) {
     val mContext = LocalContext.current
     val mViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(mContext))
+    val mGoalsViewModel: GoalsViewModel = viewModel(factory = GoalsViewModel.Factory)
     val mProfileState by mViewModel.profile.collectAsState()
 
     var mStep by rememberSaveable { mutableStateOf(OnboardingStep.WELCOME) }
@@ -77,7 +73,8 @@ fun OnboardingScreen(
     var mDesiredWeightKg by rememberSaveable { mutableStateOf("") }
     var mActivityType by rememberSaveable { mutableStateOf(mActivityLevels[1].title) }
     var mWorkoutDays by rememberSaveable { mutableIntStateOf(3) }
-    var mJourneyGoal by rememberSaveable { mutableStateOf(mJourneyOptions.first()) }
+    var mAge by rememberSaveable { mutableStateOf("") }
+    var mGender by rememberSaveable { mutableStateOf("") }
     var mWaterTargetMl by rememberSaveable { mutableStateOf("2500") }
 
     // Sync from profile when it first loads
@@ -89,7 +86,8 @@ fun OnboardingScreen(
             if (mDesiredWeightKg.isEmpty()) mDesiredWeightKg = p.goalWeightKg?.toCleanInput().orEmpty()
             if (p.activityType.isNotBlank()) mActivityType = p.activityType
             p.workoutDaysPerWeek?.let { mWorkoutDays = it.coerceIn(1, 7) }
-            if (p.journeyGoal.isNotBlank()) mJourneyGoal = p.journeyGoal
+            if (p.age != null) mAge = p.age.toString()
+            if (p.gender.isNotBlank()) mGender = p.gender
             mWaterTargetMl = p.waterTargetMl?.toString() ?: "2500"
         }
     }
@@ -97,18 +95,23 @@ fun OnboardingScreen(
     val mWeightValue = mWeightKg.toFloatOrNull()
     val mHeightValue = mHeightCm.toIntOrNull()
     val mDesiredWeightValue = mDesiredWeightKg.toFloatOrNull()
+    val mAgeValue = mAge.toIntOrNull()
     val mWaterTargetValue = mWaterTargetMl.toIntOrNull()
 
+    val mDesiredWeightError = mDesiredWeightKg.isNotBlank() && 
+        (mDesiredWeightValue == null || mDesiredWeightValue !in 20f..400f)
+
     val mCanMoveFromProfile = mName.isNotBlank() &&
-            mWeightValue != null && mWeightValue > 0 &&
+            mWeightValue != null && mWeightValue in 20f..400f &&
             mHeightValue != null && mHeightValue > 0 &&
-            mDesiredWeightValue != null && mDesiredWeightValue > 0
+            mDesiredWeightValue != null && mDesiredWeightValue in 20f..400f &&
+            !mDesiredWeightError
 
     val mProgress = when (mStep) {
         OnboardingStep.WELCOME -> 0.1f
         OnboardingStep.PROFILE -> 0.3f
         OnboardingStep.ACTIVITY -> 0.5f
-        OnboardingStep.JOURNEY -> 0.7f
+        OnboardingStep.DEMOGRAPHICS -> 0.7f
         OnboardingStep.SUMMARY -> 0.9f
     }
 
@@ -134,8 +137,8 @@ fun OnboardingScreen(
                                 mStep = when (mStep) {
                                     OnboardingStep.PROFILE -> OnboardingStep.WELCOME
                                     OnboardingStep.ACTIVITY -> OnboardingStep.PROFILE
-                                    OnboardingStep.JOURNEY -> OnboardingStep.ACTIVITY
-                                    OnboardingStep.SUMMARY -> OnboardingStep.JOURNEY
+                                    OnboardingStep.DEMOGRAPHICS -> OnboardingStep.ACTIVITY
+                                    OnboardingStep.SUMMARY -> OnboardingStep.DEMOGRAPHICS
                                     else -> mStep
                                 }
                             }) {
@@ -174,36 +177,63 @@ fun OnboardingScreen(
                             mWeightKg, { mWeightKg = it.filterDecimal(6) },
                             mHeightCm, { mHeightCm = it.filterNumeric(3) },
                             mDesiredWeightKg, { mDesiredWeightKg = it.filterDecimal(6) },
-                            mCanMoveFromProfile
+                            mCanMoveFromProfile,
+                            mDesiredWeightError
                         ) { mStep = OnboardingStep.ACTIVITY }
 
                         OnboardingStep.ACTIVITY -> ActivityStep(
                             mActivityType, { mActivityType = it }
-                        ) { mStep = OnboardingStep.JOURNEY }
+                        ) { mStep = OnboardingStep.DEMOGRAPHICS }
 
-                        OnboardingStep.JOURNEY -> JourneyStep(
-                            mWorkoutDays, { mWorkoutDays = it },
-                            mJourneyGoal, { mJourneyGoal = it },
-                            mWaterTargetMl, { mWaterTargetMl = it.filterNumeric(5) },
-                            mWaterTargetValue != null && mWaterTargetValue > 0
+                        OnboardingStep.DEMOGRAPHICS -> DemographicsStep(
+                            mAge, { mAge = it.filterNumeric(3) },
+                            mGender, { mGender = it },
+                            mAgeValue != null && mAgeValue in 10..120 && mGender.isNotBlank()
                         ) { mStep = OnboardingStep.SUMMARY }
 
                         OnboardingStep.SUMMARY -> SummaryStep(
-                            mName, mWeightKg, mDesiredWeightKg, mHeightCm, mActivityType, mWorkoutDays, mJourneyGoal, mWaterTargetMl,
+                            mName, mWeightKg, mDesiredWeightKg, mHeightCm, mActivityType, mWorkoutDays, mAge, mGender, mWaterTargetMl,
                             onFinish = {
+                                val weightVal = mWeightValue ?: 0f
+                                val heightVal = (mHeightValue ?: 0).toFloat()
+                                val ageVal = mAgeValue ?: 30
+                                val activityLevel = mActivityLevels.find { it.title == mActivityType }
+
+                                val bmr = if (mGender == "male") {
+                                    (10 * weightVal) + (6.25 * heightVal) - (5 * ageVal) + 5
+                                } else {
+                                    (10 * weightVal) + (6.25 * heightVal) - (5 * ageVal) - 161
+                                }
+                                val tdee = (bmr * (activityLevel?.multiplier ?: 1.2f)).toInt()
+                                
+                                val goalWeightVal = mDesiredWeightValue ?: weightVal
+                                val caloriesTarget = when {
+                                    weightVal > goalWeightVal -> tdee - 500
+                                    weightVal < goalWeightVal -> tdee + 300
+                                    else -> tdee
+                                }
+
                                 mViewModel.save(
                                     UserProfile(
                                         name = mName.trim(),
                                         heightCm = mHeightValue,
                                         weightKg = mWeightValue,
                                         goalWeightKg = mDesiredWeightValue,
+                                        age = mAgeValue,
+                                        gender = mGender,
                                         activityType = mActivityType,
                                         workoutDaysPerWeek = mWorkoutDays,
-                                        journeyGoal = mJourneyGoal,
                                         waterTargetMl = mWaterTargetValue,
                                         onboardingCompleted = true,
                                     ),
                                 )
+
+                                mGoalsViewModel.createOnboardingGoals(
+                                    workoutDaysPerWeek = mWorkoutDays,
+                                    waterTargetMl = mWaterTargetValue ?: 2500,
+                                    caloriesTarget = caloriesTarget,
+                                )
+
                                 onCompleted()
                             }
                         )
@@ -260,6 +290,7 @@ private fun ProfileStep(
     height: String, onHeightChange: (String) -> Unit,
     goalWeight: String, onGoalWeightChange: (String) -> Unit,
     canMove: Boolean,
+    goalWeightError: Boolean = false,
     onNext: () -> Unit
 ) {
     OnboardingCard(title = "Tell us about yourself") {
@@ -267,23 +298,24 @@ private fun ProfileStep(
             OnboardingTextField(value = name, onValueChange = onNameChange, label = "Full Name")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OnboardingTextField(
-                    value = weight, onValueChange = onWeightChange, 
-                    label = "Weight (kg)", modifier = Modifier.weight(1f), 
+                    value = weight, onValueChange = onWeightChange,
+                    label = "Weight (kg)", modifier = Modifier.weight(1f),
                     keyboardType = KeyboardType.Decimal
                 )
                 OnboardingTextField(
-                    value = height, onValueChange = onHeightChange, 
-                    label = "Height (cm)", modifier = Modifier.weight(1f), 
+                    value = height, onValueChange = onHeightChange,
+                    label = "Height (cm)", modifier = Modifier.weight(1f),
                     keyboardType = KeyboardType.Number
                 )
             }
             OnboardingTextField(
-                value = goalWeight, onValueChange = onGoalWeightChange, 
-                label = "Goal Weight (kg)", keyboardType = KeyboardType.Decimal
+                value = goalWeight, onValueChange = onGoalWeightChange,
+                label = "Goal Weight (kg)", keyboardType = KeyboardType.Decimal,
+                isError = goalWeightError
             )
         }
     }
-    
+
     OnboardingButton(text = "CONTINUE", enabled = canMove, onClick = onNext)
 }
 
@@ -309,44 +341,42 @@ private fun ActivityStep(
 }
 
 @Composable
-private fun JourneyStep(
-    workoutDays: Int, onDaysChange: (Int) -> Unit,
-    goal: String, onGoalChange: (String) -> Unit,
-    water: String, onWaterChange: (String) -> Unit,
+private fun DemographicsStep(
+    age: String, onAgeChange: (String) -> Unit,
+    gender: String, onGenderChange: (String) -> Unit,
     canMove: Boolean,
     onNext: () -> Unit
 ) {
-    OnboardingCard(title = "Your Weekly Goal") {
+    OnboardingCard(title = "About You") {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Text("Workout days per week", color = Color.White, fontWeight = FontWeight.Bold)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                (1..7).forEach { day ->
-                    DayChip(
-                        day = day,
-                        isSelected = workoutDays == day,
-                        onClick = { onDaysChange(day) }
+                Box(modifier = Modifier.weight(1f)) {
+                    OnboardingTextField(
+                        value = age, onValueChange = onAgeChange,
+                        label = "Age (years)", keyboardType = KeyboardType.Number
                     )
                 }
             }
-            
-            Text("Journey Goal", color = Color.White, fontWeight = FontWeight.Bold)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                mJourneyOptions.forEach { option ->
-                    GoalOption(
-                        title = option,
-                        isSelected = goal == option,
-                        onClick = { onGoalChange(option) }
-                    )
-                }
+
+            Text("Gender", color = Color.White, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GenderChip(
+                    text = "Male",
+                    isSelected = gender == "male",
+                    onClick = { onGenderChange("male") }
+                )
+                GenderChip(
+                    text = "Female",
+                    isSelected = gender == "female",
+                    onClick = { onGenderChange("female") }
+                )
             }
-            
-            OnboardingTextField(
-                value = water, onValueChange = onWaterChange,
-                label = "Daily Water Goal (ml)", keyboardType = KeyboardType.Number
-            )
         }
     }
     OnboardingButton(text = "CONTINUE", enabled = canMove, onClick = onNext)
@@ -354,16 +384,25 @@ private fun JourneyStep(
 
 @Composable
 private fun SummaryStep(
-    name: String, weight: String, goalWeight: String, height: String, activity: String, workouts: Int, goal: String, water: String,
+    name: String, weightStr: String, goalWeight: String, heightStr: String, activity: String, workouts: Int, age: String, gender: String, water: String,
     onFinish: () -> Unit
 ) {
-    val weightVal = weight.toFloatOrNull() ?: 0f
+    val weightVal = weightStr.toFloatOrNull() ?: 0f
+    val heightVal = heightStr.toFloatOrNull() ?: 0f
+    val ageVal = age.toIntOrNull() ?: 30
     val activityLevel = mActivityLevels.find { it.title == activity }
-    val maintenance = (weightVal * (activityLevel?.multiplier ?: 30f)).toInt()
-    val recommended = when (goal) {
-        "Lose weight" -> maintenance - 500
-        "Gain weight" -> maintenance + 300
-        else -> maintenance
+
+    val bmr = if (gender == "male") {
+        (10 * weightVal) + (6.25 * heightVal) - (5 * ageVal) + 5
+    } else {
+        (10 * weightVal) + (6.25 * heightVal) - (5 * ageVal) - 161
+    }
+    val tdee = (bmr * (activityLevel?.multiplier ?: 1.2f)).toInt()
+    val goalWeightVal = goalWeight.toFloatOrNull() ?: weightVal
+    val recommended = when {
+        weightVal > goalWeightVal -> tdee - 500
+        weightVal < goalWeightVal -> tdee + 300
+        else -> tdee
     }
 
     OnboardingCard(title = "Your Plan is Ready!") {
@@ -372,7 +411,7 @@ private fun SummaryStep(
                 text = "Great work, $name! Based on your profile, here's your starter plan:",
                 color = Color.White.copy(alpha = 0.8f)
             )
-            
+
             Surface(
                 color = Color.White.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(16.dp),
@@ -380,7 +419,7 @@ private fun SummaryStep(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SummaryRow("Daily Intake", "$recommended kcal", Color(0xFF00E5FF))
-                    SummaryRow("Maintenance", "$maintenance kcal", Color.White.copy(alpha = 0.6f))
+                    SummaryRow("Maintenance", "$tdee kcal", Color.White.copy(alpha = 0.6f))
                     SummaryRow("Water Goal", "$water ml", Color(0xFF2196F3))
                     SummaryRow("Workouts", "$workouts days/week", Color(0xFF4CAF50))
                 }
@@ -422,26 +461,6 @@ private fun ActivityOption(title: String, description: String, isSelected: Boole
 }
 
 @Composable
-private fun GoalOption(title: String, isSelected: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.6f),
-        border = if (isSelected) BorderStroke(1.dp, Color(0xFF00E5FF)) else null,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(title, color = if (isSelected) Color(0xFF00E5FF) else Color.White)
-            if (isSelected) Icon(Icons.Default.Check, null, tint = Color(0xFF00E5FF))
-        }
-    }
-}
-
-@Composable
 private fun DayChip(day: Int, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
@@ -451,6 +470,24 @@ private fun DayChip(day: Int, isSelected: Boolean, onClick: () -> Unit) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(day.toString(), color = if (isSelected) Color.Black else Color.White)
+        }
+    }
+}
+
+@Composable
+private fun RowScope.GenderChip(text: String, isSelected: Boolean, onClick: () -> Unit) {
+    val chipModifier = Modifier.weight(1f)
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) Color(0xFF00E5FF) else Color.Black.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(20.dp),
+        modifier = chipModifier
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            Text(text, color = if (isSelected) Color.Black else Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -482,24 +519,31 @@ private fun OnboardingTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    isError: Boolean = false
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = Color.White.copy(alpha = 0.6f)) },
+        label = { Text(label, color = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.6f)) },
         singleLine = true,
         modifier = modifier.fillMaxWidth(),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(12.dp),
+        isError = isError,
+        supportingText = if (isError) { { Text("20–400 kg", color = MaterialTheme.colorScheme.error) } } else null,
         colors = TextFieldDefaults.colors(
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.White,
             focusedContainerColor = Color.White.copy(alpha = 0.2f),
             unfocusedContainerColor = Color.White.copy(alpha = 0.15f),
-            focusedIndicatorColor = Color(0xFF00E5FF),
-            unfocusedIndicatorColor = Color.White.copy(alpha = 0.3f),
-            cursorColor = Color(0xFF00E5FF)
+            focusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color(0xFF00E5FF),
+            unfocusedIndicatorColor = if (isError) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.3f),
+            cursorColor = Color(0xFF00E5FF),
+            errorIndicatorColor = MaterialTheme.colorScheme.error,
+            errorTextColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = Color.White.copy(alpha = 0.15f),
+            errorSupportingTextColor = MaterialTheme.colorScheme.error
         )
     )
 }
