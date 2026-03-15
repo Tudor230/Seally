@@ -139,22 +139,61 @@ function App() {
 
     // Apply user-selected rotation
     const isQuarterTurn = mRotation === 90 || mRotation === 270
-    const sourceWidth = isQuarterTurn ? frame.frameHeight : frame.frameWidth
-    const sourceHeight = isQuarterTurn ? frame.frameWidth : frame.frameHeight
 
+    // Calculate body bounding box from landmarks (in normalized 0-1 space)
+    let minX = 1, maxX = 0, minY = 1, maxY = 0
+    let hasValidLandmarks = false
+    for (const landmark of frame.landmarks) {
+      if (landmark && landmark.x >= 0 && landmark.x <= 1 && landmark.y >= 0 && landmark.y <= 1) {
+        let x = landmark.x
+        let y = landmark.y
+
+        // Apply rotation to bounding box calculation
+        if (mRotation === 90) {
+          const temp = x
+          x = y
+          y = 1 - temp
+        } else if (mRotation === 180) {
+          x = 1 - x
+          y = 1 - y
+        } else if (mRotation === 270) {
+          const temp = x
+          x = 1 - y
+          y = temp
+        }
+
+        // Mirror for front camera
+        const mirroredX = frame.isFrontCamera ? 1 - x : x
+
+        minX = Math.min(minX, mirroredX)
+        maxX = Math.max(maxX, mirroredX)
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y)
+        hasValidLandmarks = true
+      }
+    }
+
+    if (!hasValidLandmarks) return
+
+    const bodyWidth = maxX - minX
+    const bodyHeight = maxY - minY
+
+    // Use body dimensions for scaling instead of frame dimensions
     const padding = 0.9
-    const scale = Math.min(renderWidth / sourceWidth, renderHeight / sourceHeight) * padding
-    const scaledFrameWidth = sourceWidth * scale
-    const scaledFrameHeight = sourceHeight * scale
-    const offsetX = (renderWidth - scaledFrameWidth) / 2
-    const offsetY = (renderHeight - scaledFrameHeight) / 2
+    const scale = Math.min(
+      renderWidth / (bodyWidth || 1),
+      renderHeight / (bodyHeight || 1)
+    ) * padding
+
+    const scaledBodyWidth = bodyWidth * scale
+    const scaledBodyHeight = bodyHeight * scale
 
     const mapPoint = (landmark) => {
       if (!landmark) return null
-      
+
       let x = landmark.x
       let y = landmark.y
-      
+
       // Apply rotation
       if (mRotation === 90) {
         // 90° clockwise: (x, y) -> (y, 1-x)
@@ -171,13 +210,14 @@ function App() {
         x = 1 - y
         y = temp
       }
-      
+
       // Mirror for front camera
       const mirroredX = frame.isFrontCamera ? 1 - x : x
-      
+
+      // Scale and center the landmark
       return {
-        x: (mirroredX * scaledFrameWidth) + offsetX,
-        y: (y * scaledFrameHeight) + offsetY
+        x: ((mirroredX - minX) * scale) + (renderWidth - scaledBodyWidth) / 2,
+        y: ((y - minY) * scale) + (renderHeight - scaledBodyHeight) / 2
       }
     }
 
