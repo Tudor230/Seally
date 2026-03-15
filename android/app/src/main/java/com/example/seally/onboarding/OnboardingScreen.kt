@@ -1,8 +1,8 @@
 package com.example.seally.onboarding
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -156,7 +156,8 @@ fun OnboardingScreen(
                         slideInHorizontally { -it } + fadeIn() with slideOutHorizontally { it } + fadeOut()
                     }
                 },
-                modifier = Modifier.padding(padding).fillMaxSize()
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                label = "OnboardingStepTransition"
             ) { step ->
                 Column(
                     modifier = Modifier
@@ -373,7 +374,7 @@ private fun SummaryStep(
             )
             
             Surface(
-                color = Color.White.copy(alpha = 0.05f),
+                color = Color.White.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -408,7 +409,7 @@ private fun SummaryRow(label: String, value: String, valueColor: Color) {
 private fun ActivityOption(title: String, description: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
+        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.6f),
         border = if (isSelected) BorderStroke(1.dp, Color(0xFF00E5FF)) else null,
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth()
@@ -424,8 +425,8 @@ private fun ActivityOption(title: String, description: String, isSelected: Boole
 private fun GoalOption(title: String, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.05f),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF)) else null,
+        color = if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.6f),
+        border = if (isSelected) BorderStroke(1.dp, Color(0xFF00E5FF)) else null,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -444,7 +445,7 @@ private fun GoalOption(title: String, isSelected: Boolean, onClick: () -> Unit) 
 private fun DayChip(day: Int, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = if (isSelected) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.1f),
+        color = if (isSelected) Color(0xFF00E5FF) else Color.Black.copy(alpha = 0.6f),
         shape = CircleShape,
         modifier = Modifier.size(40.dp)
     ) {
@@ -464,7 +465,7 @@ private fun OnboardingCard(title: String, content: @Composable () -> Unit) {
             fontWeight = FontWeight.Bold
         )
         Surface(
-            color = Color.Black.copy(alpha = 0.4f),
+            color = Color.Black.copy(alpha = 0.85f),
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -494,10 +495,10 @@ private fun OnboardingTextField(
         colors = TextFieldDefaults.colors(
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.White,
-            focusedContainerColor = Color.White.copy(alpha = 0.1f),
-            unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
+            focusedContainerColor = Color.White.copy(alpha = 0.2f),
+            unfocusedContainerColor = Color.White.copy(alpha = 0.15f),
             focusedIndicatorColor = Color(0xFF00E5FF),
-            unfocusedIndicatorColor = Color.White.copy(alpha = 0.2f),
+            unfocusedIndicatorColor = Color.White.copy(alpha = 0.3f),
             cursorColor = Color(0xFF00E5FF)
         )
     )
