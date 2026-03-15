@@ -22,4 +22,6 @@ data class CalendarPlanEntryEntity(
     val quantity: Double,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int,
+    @ColumnInfo(name = "preset_name")
+    val presetName: String? = null,
 )

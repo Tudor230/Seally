@@ -118,7 +118,6 @@ private val ColorJoint = Color(0xFFFFFF00)
 fun CameraScreen(
     modifier: Modifier = Modifier,
     mViewModel: CameraViewModel = viewModel(),
-    mShowExerciseGuideOnEntry: Boolean = false,
     mOnSessionFinished: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -128,8 +127,8 @@ fun CameraScreen(
     var mPreviewView by remember { mutableStateOf<PreviewView?>(null) }
     var mSwitchSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var mIsSwitchingLens by remember { mutableStateOf(false) }
-    var mHasShownEntryGuide by remember(uiState.mSelectedExercise, mShowExerciseGuideOnEntry) {
-        mutableStateOf(!mShowExerciseGuideOnEntry)
+    var mIsGuideVisible by remember(uiState.mSelectedExercise) {
+        mutableStateOf(false)
     }
     var mCelebrationSummary by remember { mutableStateOf<ExerciseCompletionSummary?>(null) }
     var mShouldShowExerciseCelebration by remember { mutableStateOf(false) }
@@ -207,6 +206,10 @@ fun CameraScreen(
 
     LaunchedEffect(mMessageToAnnounce) {
         mErrorSpeechAnnouncer.onErrorMessage(mMessageToAnnounce)
+    }
+
+    LaunchedEffect(mIsGuideVisible) {
+        mViewModel.setFormCheckEnabled(!mIsGuideVisible)
     }
 
     DisposableEffect(mErrorSpeechAnnouncer) {
@@ -377,7 +380,7 @@ fun CameraScreen(
             exerciseType = uiState.mSelectedExercise,
             expectedGoal = uiState.mExpectedGoal,
             onOpenGuide = {
-                context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
+                mIsGuideVisible = true
             },
             onFinishSession = mViewModel::completeCurrentExerciseSession,
             modifier = Modifier
@@ -389,16 +392,16 @@ fun CameraScreen(
 
 
         // Calibration Guide Overlay
-        if (uiState.mFormFeedback.mStatus == ExerciseStatus.INITIALIZING || uiState.mFormFeedback.mStatus == ExerciseStatus.READY) {
+        if (!mIsGuideVisible && (uiState.mFormFeedback.mStatus == ExerciseStatus.INITIALIZING || uiState.mFormFeedback.mStatus == ExerciseStatus.READY)) {
             CalibrationOverlay(status = uiState.mFormFeedback.mStatus)
         }
 
-        if (!mHasShownEntryGuide) {
+        if (mIsGuideVisible) {
             val (mGuideTitle, mGuideAssetPath) = guideConfigForExercise(uiState.mSelectedExercise)
             ExerciseGuideScreen(
                 mTitle = mGuideTitle,
                 mImageAssetPath = mGuideAssetPath,
-                mOnConfirm = { mHasShownEntryGuide = true },
+                mOnConfirm = { mIsGuideVisible = false },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -670,16 +673,6 @@ private fun formatDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return "%02d:%02d".format(minutes, seconds)
-}
-
-private fun createExerciseGuideIntent(context: Context, exerciseType: ExerciseType): Intent {
-    val guideActivityClass = when (exerciseType) {
-        ExerciseType.SQUAT -> SquatGuideActivity::class.java
-        ExerciseType.PLANK -> PlankGuideActivity::class.java
-        ExerciseType.PULLUP -> PullupGuideActivity::class.java
-        ExerciseType.PUSHUP -> PushupGuideActivity::class.java
-    }
-    return Intent(context, guideActivityClass)
 }
 
 @Composable

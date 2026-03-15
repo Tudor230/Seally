@@ -61,6 +61,7 @@ data class CameraUiState(
     val mLiveKitStatus: String = "LiveKit idle",
     val mRoomCode: String = "",
     val mIsLiveKitConnected: Boolean = false,
+    val mIsFormCheckEnabled: Boolean = false,
     val mExpectedGoal: Int? = null,
     val mCompletedSessionSummary: ExerciseCompletionSummary? = null,
 )
@@ -126,7 +127,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             mPlankFormFeedbackEngine.reset()
             mPullUpFormFeedbackEngine.reset()
             mPushUpFormFeedbackEngine.reset()
-            mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
+            mUiState.update {
+                it.copy(
+                    mFormFeedback = FormFeedback(),
+                    mIsFormCheckEnabled = false,
+                )
+            }
             mUiState.update { it.copy(mLiveKitStatus = "LiveKit disabled (no camera permission)") }
             return
         }
@@ -263,18 +269,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        if (mUiState.value.mIsStartupCameraLoading) {
-            mUiState.update { it.copy(mIsStartupCameraLoading = false) }
-        }
-
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val isQuarterTurn = rotationDegrees == 90 || rotationDegrees == 270
         val frameWidth = if (isQuarterTurn) imageProxy.height else imageProxy.width
         val frameHeight = if (isQuarterTurn) imageProxy.width else imageProxy.height
 
         val currentState = mUiState.value
+        if (currentState.mIsStartupCameraLoading) {
+            mUiState.update { it.copy(mIsStartupCameraLoading = false) }
+        }
         if (currentState.mFrameWidth != frameWidth || currentState.mFrameHeight != frameHeight) {
             mUiState.update { it.copy(mFrameWidth = frameWidth, mFrameHeight = frameHeight) }
+        }
+        if (!currentState.mIsFormCheckEnabled) {
+            imageProxy.close()
+            return
         }
 
         runCatching {
@@ -332,6 +341,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
+                mIsFormCheckEnabled = false,
                 mExpectedGoal = null,
                 mCompletedSessionSummary = null,
             )
@@ -345,8 +355,32 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
+                mIsFormCheckEnabled = false,
                 mExpectedGoal = mExpectedGoal.coerceAtLeast(1),
                 mCompletedSessionSummary = null,
+                mErrorMessage = null,
+            )
+        }
+    }
+
+    fun setFormCheckEnabled(isEnabled: Boolean) {
+        val currentState = mUiState.value
+        if (currentState.mIsFormCheckEnabled == isEnabled) return
+
+        if (isEnabled) {
+            clearPoseOverlay()
+            mUiState.update {
+                it.copy(
+                    mIsFormCheckEnabled = true,
+                    mErrorMessage = null,
+                )
+            }
+            return
+        }
+
+        mUiState.update {
+            it.copy(
+                mIsFormCheckEnabled = false,
                 mErrorMessage = null,
             )
         }
@@ -364,6 +398,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     ExerciseType.PULLUP -> ExerciseType.PUSHUP
                     ExerciseType.PUSHUP -> ExerciseType.SQUAT
                 },
+                mIsFormCheckEnabled = false,
                 mExpectedGoal = null,
                 mCompletedSessionSummary = null,
             )
@@ -375,6 +410,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         resetExerciseEnginesAndFeedback()
         mUiState.update {
             it.copy(
+                mIsFormCheckEnabled = false,
                 mExpectedGoal = null,
                 mCompletedSessionSummary = null,
             )

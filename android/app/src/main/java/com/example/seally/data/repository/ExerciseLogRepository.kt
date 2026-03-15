@@ -24,6 +24,7 @@ class ExerciseLogRepository(context: Context) {
         quantity: Double,
         metric: String,
         date: String,
+        presetName: String? = null,
     ): String {
         val id = UUID.randomUUID().toString()
         mDao.insert(
@@ -33,6 +34,7 @@ class ExerciseLogRepository(context: Context) {
                 quantity = quantity,
                 metric = metric,
                 date = date,
+                presetName = presetName,
             ),
         )
         return id

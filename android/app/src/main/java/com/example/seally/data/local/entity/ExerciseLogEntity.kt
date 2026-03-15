@@ -16,4 +16,6 @@ data class ExerciseLogEntity(
     val metric: String,
     @ColumnInfo(name = "date")
     val date: String,
+    @ColumnInfo(name = "preset_name")
+    val presetName: String? = null,
 )

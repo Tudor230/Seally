@@ -76,7 +76,6 @@ fun ExercisesScreen(
             CameraScreen(
                 modifier = Modifier.fillMaxSize(),
                 mViewModel = mCameraViewModel,
-                mShowExerciseGuideOnEntry = true,
                 mOnSessionFinished = {
                     mSelectedExerciseForChecker = null
                 },
