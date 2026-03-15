@@ -162,6 +162,9 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     var mShouldShowSealCelebration by mutableStateOf(false)
         private set
 
+    var mLastAddedFoodRatingCategory by mutableStateOf<MealRatingCategory?>(null)
+        private set
+
     val mFoods = mutableStateListOf<FoodEntry>()
 
     private var mSealCelebrationJob: Job? = null
@@ -185,6 +188,8 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun addManualFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
+            mLastAddedFoodRatingCategory = foodEntry.ratingCategory
+            triggerSealCelebration()
             mNutritionFoodEntryRepository.addEntry(
                 date = mCurrentDate,
                 name = foodEntry.name,
@@ -197,12 +202,13 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 fibers = foodEntry.fibers,
                 isHealthy = foodEntry.isHealthy,
             )
-            triggerSealCelebration()
         }
     }
 
     fun addScannedFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
+            mLastAddedFoodRatingCategory = foodEntry.ratingCategory
+            triggerSealCelebration()
             mNutritionFoodEntryRepository.addEntry(
                 date = mCurrentDate,
                 name = foodEntry.name,
@@ -215,7 +221,6 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
                 fibers = foodEntry.fibers,
                 isHealthy = foodEntry.isHealthy,
             )
-            triggerSealCelebration()
             mCurrentPage = NutritionPage.Food
         }
     }
@@ -1909,7 +1914,7 @@ private fun calculateMealRating(
     }
 
     val category = when {
-        rating > 7 -> MealRatingCategory.Good
+        rating >= 7 -> MealRatingCategory.Good
         rating >= 4 -> MealRatingCategory.Medium
         else -> MealRatingCategory.Bad
     }

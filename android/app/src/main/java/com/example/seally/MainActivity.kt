@@ -50,15 +50,24 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import com.example.seally.camera.CameraViewModel
 import com.example.seally.exercises.ExercisesScreen
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import com.example.seally.goals.GoalsScreen
 import com.example.seally.home.HomeScreen
 import com.example.seally.onboarding.OnboardingScreen
 import com.example.seally.nutrition.NutritionScreen
 import com.example.seally.nutrition.NutritionViewModel
+import com.example.seally.nutrition.MealRatingCategory
 import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.ProfileRoute
 import com.example.seally.ui.theme.SeallyTheme
@@ -135,6 +144,19 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
     val context = LocalContext.current
     val nutritionViewModel: NutritionViewModel = viewModel()
 
+    val pagerState = rememberPagerState(pageCount = { AppDestinations.entries.size })
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(currentDestination) {
+        if (currentDestination != AppDestinations.entries[pagerState.currentPage]) {
+            pagerState.animateScrollToPage(currentDestination.ordinal)
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage) {
+        currentDestination = AppDestinations.entries[pagerState.currentPage]
+    }
+
     LaunchedEffect(Unit) {
         val hasCameraPermission = ContextCompat.checkSelfPermission(
             context,
@@ -206,15 +228,10 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
             },
         ) { innerPadding ->
             val mLayoutDirection = LocalLayoutDirection.current
-            val mShouldApplyBottomPadding = !shouldShowProfile && when (currentDestination) {
-                AppDestinations.NUTRITION -> shouldShowBottomBarForNutrition
-                AppDestinations.EXERCISES -> shouldShowBottomBarForExercises
-                else -> true
-            }
             val mContentModifier = Modifier.padding(
                 start = innerPadding.calculateStartPadding(mLayoutDirection),
                 end = innerPadding.calculateEndPadding(mLayoutDirection),
-                bottom = if (mShouldApplyBottomPadding) innerPadding.calculateBottomPadding() else 0.dp,
+                bottom = 0.dp // Profile doesn't need bottom padding as bar is hidden
             )
 
             if (shouldShowProfile) {
@@ -224,61 +241,81 @@ fun SeallyApp( mCameraViewModel: CameraViewModel = viewModel()) {
                     onBackClick = { shouldShowProfile = false },
                 )
             } else {
-                when (currentDestination) {
-                    AppDestinations.NUTRITION -> NutritionScreen(
-                        modifier = mContentModifier,
-                        onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
-                        onProfileClick = { 
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
-                            shouldShowProfile = true 
-                        },
-                        onSettingsClick = {
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
-                            shouldShowProfile = true
-                        },
-                        mViewModel = nutritionViewModel,
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = !shouldShowProfile
+                ) { page ->
+                    val destination = AppDestinations.entries[page]
+                    val shouldApplyBottomPadding = when (destination) {
+                        AppDestinations.NUTRITION -> shouldShowBottomBarForNutrition
+                        AppDestinations.EXERCISES -> shouldShowBottomBarForExercises
+                        else -> true
+                    }
+                    val pageModifier = Modifier.padding(
+                        start = innerPadding.calculateStartPadding(mLayoutDirection),
+                        end = innerPadding.calculateEndPadding(mLayoutDirection),
+                        bottom = if (shouldApplyBottomPadding) innerPadding.calculateBottomPadding() else 0.dp,
                     )
-                    AppDestinations.GOALS -> GoalsScreen(
-                        modifier = mContentModifier,
-                        onProfileClick = { 
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
-                            shouldShowProfile = true 
-                        },
-                        onSettingsClick = {
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
-                            shouldShowProfile = true
-                        },
-                    )
-                    AppDestinations.HOME -> HomeScreen(
-                        modifier = mContentModifier,
-                        onProfileClick = { 
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
-                            shouldShowProfile = true 
-                        },
-                        onSettingsClick = {
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
-                            shouldShowProfile = true
-                        }
-                    )
-                    AppDestinations.EXERCISES -> ExercisesScreen(
-                        modifier = mContentModifier,
-                        mCameraViewModel = mCameraViewModel,
-                        onDetailVisibilityChanged = { shouldShowBottomBarForExercises = it },
-                        onProfileClick = { 
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
-                            shouldShowProfile = true 
-                        },
-                        onSettingsClick = {
-                            profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
-                            shouldShowProfile = true
-                        },
-                    )
+
+                    when (destination) {
+                        AppDestinations.NUTRITION -> NutritionScreen(
+                            modifier = pageModifier,
+                            onDetailVisibilityChanged = { shouldShowBottomBarForNutrition = it },
+                            onProfileClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                                shouldShowProfile = true
+                            },
+                            onSettingsClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                                shouldShowProfile = true
+                            },
+                            mViewModel = nutritionViewModel,
+                        )
+                        AppDestinations.GOALS -> GoalsScreen(
+                            modifier = pageModifier,
+                            onProfileClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                                shouldShowProfile = true
+                            },
+                            onSettingsClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                                shouldShowProfile = true
+                            },
+                        )
+                        AppDestinations.HOME -> HomeScreen(
+                            modifier = pageModifier,
+                            onProfileClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                                shouldShowProfile = true
+                            },
+                            onSettingsClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                                shouldShowProfile = true
+                            }
+                        )
+                        AppDestinations.EXERCISES -> ExercisesScreen(
+                            modifier = pageModifier,
+                            mCameraViewModel = mCameraViewModel,
+                            onDetailVisibilityChanged = { shouldShowBottomBarForExercises = it },
+                            onProfileClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.PROFILE
+                                shouldShowProfile = true
+                            },
+                            onSettingsClick = {
+                                profileStartingDestination = com.example.seally.profile.ProfileDestination.SETTINGS
+                                shouldShowProfile = true
+                            },
+                        )
+                    }
                 }
             }
         }
 
         if (shouldShowSealCelebrationOverlay) {
-            FullScreenSealCelebrationOverlay()
+            FullScreenSealCelebrationOverlay(
+                ratingCategory = nutritionViewModel.mLastAddedFoodRatingCategory
+            )
         }
     }
 }
@@ -327,17 +364,42 @@ private fun DestinationIcon(destination: AppDestinations) {
 }
 
 @Composable
-private fun FullScreenSealCelebrationOverlay() {
+private fun FullScreenSealCelebrationOverlay(ratingCategory: MealRatingCategory?) {
+    val context = LocalContext.current
+    val imagePath = when (ratingCategory) {
+        MealRatingCategory.Good -> "file:///android_asset/icons/seal_animation_GoodFood.gif"
+        MealRatingCategory.Medium -> "file:///android_asset/icons/mehFoodSeal.png"
+        MealRatingCategory.Bad -> "file:///android_asset/icons/notHeakthyFoodSeal.png"
+        null -> null // Fallback
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "🦭",
-            style = MaterialTheme.typography.displayLarge,
-        )
+        if (imagePath != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(imagePath)
+                    .decoderFactory(
+                        if (Build.VERSION.SDK_INT >= 28) {
+                            ImageDecoderDecoder.Factory()
+                        } else {
+                            GifDecoder.Factory()
+                        }
+                    )
+                    .build(),
+                contentDescription = "Seal Celebration",
+                modifier = Modifier.size(150.dp),
+            )
+        } else {
+            Text(
+                text = "🦭",
+                style = MaterialTheme.typography.displayLarge,
+            )
+        }
     }
 }
 
