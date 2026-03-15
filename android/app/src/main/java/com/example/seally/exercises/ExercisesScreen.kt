@@ -54,7 +54,10 @@ fun ExercisesScreen(
 
     BackHandler(enabled = mIsOnSubpage) {
         when {
-            mSelectedExerciseForChecker != null -> mSelectedExerciseForChecker = null
+            mSelectedExerciseForChecker != null -> {
+                mCameraViewModel.persistExerciseSessionOnExit()
+                mSelectedExerciseForChecker = null
+            }
             showDumbbellPage -> showDumbbellPage = false
             showCalendar -> showCalendar = false
         }
@@ -68,7 +71,10 @@ fun ExercisesScreen(
                 mShowExerciseGuideOnEntry = true,
             )
             IconButton(
-                onClick = { mSelectedExerciseForChecker = null },
+                onClick = {
+                    mCameraViewModel.persistExerciseSessionOnExit()
+                    mSelectedExerciseForChecker = null
+                },
                 modifier = Modifier
                     .statusBarsPadding()
                     .padding(16.dp)
