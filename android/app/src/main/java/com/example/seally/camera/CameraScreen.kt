@@ -77,7 +77,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.seally.xp.XpCalculators
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import java.util.Locale
@@ -352,8 +351,6 @@ fun CameraScreen(
         FeedbackContent(
             feedback = uiState.mFormFeedback,
             exerciseType = uiState.mSelectedExercise,
-            targetUnits = uiState.mTargetUnits,
-            expectedSessionXp = uiState.mExpectedSessionXp,
             onOpenGuide = {
                 context.startActivity(createExerciseGuideIntent(context, uiState.mSelectedExercise))
             },
@@ -436,8 +433,6 @@ private fun CalibrationOverlay(status: ExerciseStatus) {
 private fun FeedbackContent(
     feedback: FormFeedback,
     exerciseType: ExerciseType,
-    targetUnits: Int,
-    expectedSessionXp: Int,
     onOpenGuide: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -446,15 +441,6 @@ private fun FeedbackContent(
         ExerciseType.PLANK -> "Plank"
         ExerciseType.PULLUP -> "Pull-up"
         ExerciseType.PUSHUP -> "Push-up"
-    }
-    val mTargetTotalUnits = targetUnits.coerceAtLeast(1)
-    val mCompletedUnits = when (exerciseType) {
-        ExerciseType.PLANK -> (feedback.mMaxHoldDurationMs / 1000L).toInt().coerceAtLeast(0)
-        else -> feedback.mRepCount.coerceAtLeast(0)
-    }
-    val mEarnedXp = when (exerciseType) {
-        ExerciseType.PLANK -> XpCalculators.totalPlankXpForSeconds(mCompletedUnits)
-        else -> XpCalculators.exerciseXpForRepDelta(mCompletedUnits)
     }
 
     Column(
@@ -512,42 +498,25 @@ private fun FeedbackContent(
                 else -> "REPS"
             }
 
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Column(horizontalAlignment = Alignment.End) {
-                    if (exerciseType == ExerciseType.PLANK) {
-                        Text(
-                            text = "SAVED ${formatDuration(feedback.mMaxHoldDurationMs)}",
-                            color = Color.White.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
+            Column(horizontalAlignment = Alignment.End) {
+                if (exerciseType == ExerciseType.PLANK) {
                     Text(
-                        text = counterLabel,
+                        text = "SAVED ${formatDuration(feedback.mMaxHoldDurationMs)}",
                         color = Color.White.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.labelSmall
                     )
-                    Text(
-                        text = counterValue,
-                        color = Color.White,
-                        style = MaterialTheme.typography.displayLarge,
-                        fontWeight = FontWeight.Black
-                    )
                 }
-                androidx.compose.material3.Surface(
-                    color = ColorOverlay,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                ) {
-                    Text(
-                        text = "XP $mEarnedXp/$expectedSessionXp",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
-                }
+                Text(
+                    text = counterLabel,
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = counterValue,
+                    color = Color.White,
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Black
+                )
             }
         }
 
@@ -581,15 +550,6 @@ private fun FeedbackContent(
                     )
                 }
 
-                Text(
-                    text = if (exerciseType == ExerciseType.PLANK) {
-                        "Target: $mTargetTotalUnits s"
-                    } else {
-                        "Target: $mTargetTotalUnits reps"
-                    },
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
                 Text(
                     text = feedback.mErrorMessage ?: feedback.mPrimaryCue ?: "Keep going!",
                     color = Color.White,

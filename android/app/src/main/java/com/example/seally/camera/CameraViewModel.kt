@@ -11,8 +11,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.livekit.LandmarkPacketEncoder
 import com.example.seally.livekit.LiveKitPublisher
-import com.example.seally.xp.XpCalculators
-import com.example.seally.xp.XpRepository
 import com.google.mediapipe.tasks.components.containers.Landmark
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import kotlinx.coroutines.Dispatchers
@@ -36,8 +34,6 @@ data class CameraUiState(
     val mFrameWidth: Int = 0,
     val mFrameHeight: Int = 0,
     val mSelectedExercise: ExerciseType = ExerciseType.SQUAT,
-    val mTargetUnits: Int = 12,
-    val mExpectedSessionXp: Int = 24,
     val mFormFeedback: FormFeedback = FormFeedback(),
     val mLiveKitStatus: String = "LiveKit idle",
     val mRoomCode: String = "",
@@ -64,13 +60,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mHasAttemptedWarmup: Boolean = false
     private val mLiveKitPublisher = LiveKitPublisher(getApplication())
     private val mExerciseLogRepository = ExerciseLogRepository(getApplication())
-    private val mXpRepository = XpRepository(getApplication())
     private var mIsLiveKitConnecting: Boolean = false
     private var mLandmarkSequence: Long = 0L
     private var mLastLandmarkSentAtMs: Long = 0L
     private var mFrameCounter: Long = 0L
-    private var mAwardedRepCountInSession: Int = 0
-    private var mAwardedPlankXpInSession: Int = 0
     private val mLiveKitUrl: String by lazy { readConfigString("livekit_url").trim() }
     private val mLiveKitApiKey: String by lazy { readConfigString("livekit_api_key").trim() }
     private val mLiveKitApiSecret: String by lazy { readConfigString("livekit_api_secret").trim() }
@@ -188,10 +181,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                                         worldLandmarks = firstPoseWorld,
                                     )
                                 }
-                                maybeAwardInstantExerciseXp(
-                                    selectedExercise = selectedExercise,
-                                    feedback = feedback,
-                                )
                                 mUiState.update {
                                     it.copy(
                                         mLandmarks = firstPose,
@@ -314,35 +303,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (currentState.mSelectedExercise == mExerciseType) return
         persistCurrentExerciseSessionIfNeeded(currentState)
         resetExerciseEnginesAndFeedback()
-        val mDefaultTargetUnits = defaultTargetUnitsFor(mExerciseType)
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
-                mTargetUnits = mDefaultTargetUnits,
-                mExpectedSessionXp = calculateExpectedSessionXp(
-                    exerciseType = mExerciseType,
-                    targetUnits = mDefaultTargetUnits,
-                ),
-            )
-        }
-    }
-
-    fun startExerciseSession(
-        mExerciseType: ExerciseType,
-        mTargetUnits: Int,
-    ) {
-        val currentState = mUiState.value
-        persistCurrentExerciseSessionIfNeeded(currentState)
-        resetExerciseEnginesAndFeedback()
-        val targetUnits = mTargetUnits.coerceAtLeast(1)
-        mUiState.update {
-            it.copy(
-                mSelectedExercise = mExerciseType,
-                mTargetUnits = targetUnits,
-                mExpectedSessionXp = calculateExpectedSessionXp(
-                    exerciseType = mExerciseType,
-                    targetUnits = targetUnits,
-                ),
             )
         }
     }
@@ -408,52 +371,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         mPlankFormFeedbackEngine.reset()
         mPullUpFormFeedbackEngine.reset()
         mPushUpFormFeedbackEngine.reset()
-        mAwardedRepCountInSession = 0
-        mAwardedPlankXpInSession = 0
         mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
-    }
-
-    private fun maybeAwardInstantExerciseXp(
-        selectedExercise: ExerciseType,
-        feedback: FormFeedback,
-    ) {
-        val deltaXp = when (selectedExercise) {
-            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> {
-                val repCount = feedback.mRepCount.coerceAtLeast(0)
-                val repDelta = (repCount - mAwardedRepCountInSession).coerceAtLeast(0)
-                mAwardedRepCountInSession += repDelta
-                XpCalculators.exerciseXpForRepDelta(repDelta)
-            }
-            ExerciseType.PLANK -> {
-                val plankSeconds = (feedback.mMaxHoldDurationMs / 1000L).toInt().coerceAtLeast(0)
-                val currentPlankXp = XpCalculators.totalPlankXpForSeconds(plankSeconds)
-                val xpDelta = (currentPlankXp - mAwardedPlankXpInSession).coerceAtLeast(0)
-                mAwardedPlankXpInSession += xpDelta
-                xpDelta
-            }
-        }
-        if (deltaXp <= 0) return
-        viewModelScope.launch {
-            mXpRepository.addXp(deltaXp)
-        }
-    }
-
-    private fun calculateExpectedSessionXp(
-        exerciseType: ExerciseType,
-        targetUnits: Int,
-    ): Int {
-        val safeTargetUnits = targetUnits.coerceAtLeast(1)
-        return when (exerciseType) {
-            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> XpCalculators.exerciseXpForRepDelta(safeTargetUnits)
-            ExerciseType.PLANK -> XpCalculators.totalPlankXpForSeconds(safeTargetUnits)
-        }
-    }
-
-    private fun defaultTargetUnitsFor(exerciseType: ExerciseType): Int {
-        return when (exerciseType) {
-            ExerciseType.PLANK -> DEFAULT_PLANK_SECONDS
-            else -> DEFAULT_REPS
-        }
     }
 
     private fun ensureLiveKitConnected(roomCode: String) {
@@ -610,8 +528,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     companion object {
-        private const val DEFAULT_REPS = 12
-        private const val DEFAULT_PLANK_SECONDS = 30
         private const val LENS_SWITCH_RESULT_SUPPRESSION_MS = 250L
         private const val LANDMARK_SEND_MIN_INTERVAL_MS = 33L
         private const val MAX_LIVEKIT_DATA_PACKET_BYTES = 15_000
