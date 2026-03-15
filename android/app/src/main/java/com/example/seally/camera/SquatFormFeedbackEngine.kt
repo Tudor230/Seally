@@ -20,6 +20,7 @@ class SquatFormFeedbackEngine {
     private var mHasDetectedStartPosition: Boolean = false
     private var mHasReachedDepthInCurrentRep: Boolean = false
     private var mHasAnnouncedNowUpInCurrentRep: Boolean = false
+    private var mLastSpeechTimestamp: Long = 0
 
     fun process(
         normalizedLandmarks: List<NormalizedLandmark>,
@@ -69,10 +70,16 @@ class SquatFormFeedbackEngine {
             }
         }
 
-        val transitionedToAscending = previousPhase == MovementPhase.DESCENDING &&
+        if (mCurrentPhase == MovementPhase.STANDING) {
+            mMinKneeAngleInRep = Float.MAX_VALUE
+        } else {
+            mMinKneeAngleInRep = minOf(mMinKneeAngleInRep, smoothedKneeAngle)
+        }
+
+        val transitionedToAscending = (previousPhase == MovementPhase.DESCENDING || previousPhase == MovementPhase.BOTTOM) &&
             mCurrentPhase == MovementPhase.ASCENDING
         if (transitionedToAscending && mMinKneeAngleInRep > REQUIRED_DEPTH_ANGLE_DEG) {
-            frameCue = "Go deeper"
+            frameCue = "Not going low enough"
             frameJoints = listOf("hip", "knee", "ankle")
         }
 
@@ -81,11 +88,16 @@ class SquatFormFeedbackEngine {
             if (shoulderForwardDelta > SHOULDER_FORWARD_MAX_M) {
                 frameCue = "Keep your chest up"
                 frameJoints = listOf("shoulder", "ankle")
-            } else if ((sideLandmarks.mKnee.x() - sideLandmarks.mAnkle.x()) > KNEE_FORWARD_MAX_M) {
+            } else if ((sideLandmarks.mKnee.x() - sideLandmarks.mFootIndex.x()) > KNEE_FORWARD_MAX_M) {
                 frameCue = "Knees over mid-foot"
                 frameJoints = listOf("knee", "ankle")
             }
         }
+
+        if (speechCue == null) {
+            speechCue = frameCue
+        }
+        speechCue = maybeSpeak(speechCue)
 
         val hasCompletedRep = mHasDetectedStartPosition &&
             mHasReachedDepthInCurrentRep &&
@@ -98,12 +110,6 @@ class SquatFormFeedbackEngine {
             mHasAnnouncedNowUpInCurrentRep = false
         }
 
-        if (mCurrentPhase == MovementPhase.STANDING) {
-            mMinKneeAngleInRep = Float.MAX_VALUE
-        } else {
-            mMinKneeAngleInRep = minOf(mMinKneeAngleInRep, smoothedKneeAngle)
-        }
-
         mLastSmoothedKneeAngle = smoothedKneeAngle
         stabilizeCue(frameCue, frameJoints)
 
@@ -113,6 +119,7 @@ class SquatFormFeedbackEngine {
             mCurrentPhase == MovementPhase.STANDING -> ExerciseStatus.READY
             else -> ExerciseStatus.ACTIVE
         }
+        val debugMinKneeAngle = if (mMinKneeAngleInRep == Float.MAX_VALUE) null else mMinKneeAngleInRep
 
         return FormFeedback(
             mPrimaryCue = mPersistedCue,
@@ -120,6 +127,8 @@ class SquatFormFeedbackEngine {
             mStatus = status,
             mRepCount = mRepCount,
             mCurrentPhase = mCurrentPhase,
+            mDebugKneeAngleDeg = smoothedKneeAngle,
+            mDebugMinKneeAngleDeg = debugMinKneeAngle,
             mIsCorrecting = isCorrecting,
             mProblematicJoints = mPersistedCueJoints,
             mErrorMessage = mPersistedCue,
@@ -141,6 +150,7 @@ class SquatFormFeedbackEngine {
         mHasDetectedStartPosition = false
         mHasReachedDepthInCurrentRep = false
         mHasAnnouncedNowUpInCurrentRep = false
+        mLastSpeechTimestamp = 0
     }
 
     private fun stepIntoFrameFeedback(): FormFeedback {
@@ -157,6 +167,7 @@ class SquatFormFeedbackEngine {
         mHasDetectedStartPosition = false
         mHasReachedDepthInCurrentRep = false
         mHasAnnouncedNowUpInCurrentRep = false
+        val stepIntoFrameCue = maybeSpeak("Step into frame")
         return FormFeedback(
             mPrimaryCue = "Step into frame",
             mStatus = ExerciseStatus.ERROR,
@@ -164,7 +175,7 @@ class SquatFormFeedbackEngine {
             mCurrentPhase = MovementPhase.STANDING,
             mIsCorrecting = true,
             mProblematicJoints = listOf("shoulder", "hip", "knee", "ankle"),
-            mErrorMessage = "Step into frame",
+            mErrorMessage = stepIntoFrameCue,
         )
     }
 
@@ -233,6 +244,7 @@ class SquatFormFeedbackEngine {
             mHip = worldLandmarks[side.mHip],
             mKnee = worldLandmarks[side.mKnee],
             mAnkle = worldLandmarks[side.mAnkle],
+            mFootIndex = worldLandmarks[side.mFootIndex],
         )
     }
 
@@ -317,6 +329,17 @@ class SquatFormFeedbackEngine {
         return abs(Math.toDegrees(atan2(cross.toDouble(), dot.toDouble()))).toFloat()
     }
 
+    private fun maybeSpeak(message: String?): String? {
+        if (message == null) return null
+        val now = System.currentTimeMillis()
+        return if (now - mLastSpeechTimestamp >= 2000L) {
+            mLastSpeechTimestamp = now
+            message
+        } else {
+            null
+        }
+    }
+
     private data class SideLandmarks(
         val mShoulder: Landmark,
         val mElbow: Landmark,
@@ -324,6 +347,7 @@ class SquatFormFeedbackEngine {
         val mHip: Landmark,
         val mKnee: Landmark,
         val mAnkle: Landmark,
+        val mFootIndex: Landmark,
     )
 
     companion object {
@@ -333,7 +357,7 @@ class SquatFormFeedbackEngine {
         private const val BOTTOM_ANGLE_DEG = 100f
         private const val REQUIRED_DEPTH_ANGLE_DEG = 90f
         private const val SHOULDER_FORWARD_MAX_M = 0.16f
-        private const val KNEE_FORWARD_MAX_M = 0.14f
+        private const val KNEE_FORWARD_MAX_M = 0.05f
         private const val ARM_STRAIGHT_MIN_ANGLE_DEG = 160f
         private const val ARM_FORWARD_MIN_DISTANCE_M = 0.08f
         private const val ARM_HEIGHT_TOLERANCE_M = 0.12f

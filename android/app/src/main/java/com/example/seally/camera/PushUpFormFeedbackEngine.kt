@@ -21,6 +21,7 @@ class PushUpFormFeedbackEngine {
     private var mPendingCueJoints: List<String> = emptyList()
     private var mPendingCueFrames: Int = 0
     private var mClearFrames: Int = 0
+    private var mLastSpeechTimestamp: Long = 0
 
     fun process(
         normalizedLandmarks: List<NormalizedLandmark>,
@@ -123,6 +124,11 @@ class PushUpFormFeedbackEngine {
             }
         }
 
+        if (speechCue == null) {
+            speechCue = frameCue
+        }
+        speechCue = maybeSpeak(speechCue)
+
         if (!isStartPosition) {
             mMinElbowAngleInRep = minOf(mMinElbowAngleInRep, smoothedElbowAngle)
         } else if (!mHasAttemptedRepInCurrentCycle) {
@@ -165,6 +171,7 @@ class PushUpFormFeedbackEngine {
         mPendingCueJoints = emptyList()
         mPendingCueFrames = 0
         mClearFrames = 0
+        mLastSpeechTimestamp = 0
     }
 
     private fun stepIntoFrameFeedback(): FormFeedback {
@@ -182,6 +189,7 @@ class PushUpFormFeedbackEngine {
         mPendingCueJoints = emptyList()
         mPendingCueFrames = 0
         mClearFrames = 0
+        val stepIntoFrameCue = maybeSpeak("Step into frame")
         return FormFeedback(
             mPrimaryCue = "Step into frame",
             mStatus = ExerciseStatus.ERROR,
@@ -189,7 +197,7 @@ class PushUpFormFeedbackEngine {
             mCurrentPhase = MovementPhase.STANDING,
             mIsCorrecting = true,
             mProblematicJoints = listOf("shoulder", "elbow", "wrist", "hip", "knee", "ankle"),
-            mErrorMessage = "Step into frame",
+            mErrorMessage = stepIntoFrameCue,
         )
     }
 
@@ -303,6 +311,7 @@ class PushUpFormFeedbackEngine {
             mHip = worldLandmarks[side.mHip],
             mKnee = worldLandmarks[side.mKnee],
             mAnkle = worldLandmarks[side.mAnkle],
+            mFootIndex = worldLandmarks[side.mFootIndex],
         )
     }
 
@@ -323,6 +332,17 @@ class PushUpFormFeedbackEngine {
         return abs(Math.toDegrees(atan2(cross.toDouble(), dot.toDouble()))).toFloat()
     }
 
+    private fun maybeSpeak(message: String?): String? {
+        if (message == null) return null
+        val now = System.currentTimeMillis()
+        return if (now - mLastSpeechTimestamp >= 2000L) {
+            mLastSpeechTimestamp = now
+            message
+        } else {
+            null
+        }
+    }
+
     private data class PushUpSideLandmarks(
         val mShoulder: Landmark,
         val mElbow: Landmark,
@@ -330,6 +350,7 @@ class PushUpFormFeedbackEngine {
         val mHip: Landmark,
         val mKnee: Landmark,
         val mAnkle: Landmark,
+        val mFootIndex: Landmark,
     )
 
     companion object {

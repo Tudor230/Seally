@@ -161,9 +161,7 @@ fun CameraScreen(
         mHasShownEntryGuide = true
     }
 
-    val mMessageToAnnounce = uiState.mErrorMessage
-        ?: uiState.mFormFeedback.mErrorMessage
-        ?: uiState.mFormFeedback.mSpeechCue
+    val mMessageToAnnounce = uiState.mErrorMessage ?: uiState.mFormFeedback.mSpeechCue
     val mErrorSpeechAnnouncer = remember(context) { ErrorSpeechAnnouncer(context) }
 
     LaunchedEffect(mMessageToAnnounce) {
@@ -352,6 +350,14 @@ private fun FeedbackPanel(
                 append(feedback.mRepCount)
                 append(" • Phase: ")
                 append(feedback.mCurrentPhase.name.lowercase().replaceFirstChar { it.titlecase() })
+                feedback.mDebugKneeAngleDeg?.let { currentKneeAngle ->
+                    append(" • Knee: ")
+                    append(String.format(Locale.US, "%.1f°", currentKneeAngle))
+                }
+                feedback.mDebugMinKneeAngleDeg?.let { minKneeAngle ->
+                    append(" • Min knee: ")
+                    append(String.format(Locale.US, "%.1f°", minKneeAngle))
+                }
             }
             ExerciseType.PLANK -> {
                 append(" • Timer: ")
