@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -261,7 +263,8 @@ fun CameraScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp),
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(onClick = {
@@ -292,7 +295,8 @@ fun CameraScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(12.dp)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
                     .background(Color(0x88000000))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
@@ -304,6 +308,7 @@ fun CameraScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(12.dp),
         )
     }

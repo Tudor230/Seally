@@ -126,7 +126,7 @@ fun ExercisesScreen(
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 20.dp, top = 16.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 2.dp,
                 shadowElevation = 1.dp,
             ) {

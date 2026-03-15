@@ -165,7 +165,7 @@ fun HomeScreen(
                 .padding(start = 24.dp, end = 24.dp, bottom = 52.dp)
                 .alpha(if (shouldShowMessage) 1f else 0f),
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 1.dp,
         ) {
             Text(
@@ -214,7 +214,7 @@ private fun HomeGoalButton(
                 .size(84.dp)
                 .clickable(onClick = onClick),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 2.dp,
             shadowElevation = 4.dp,
         ) {
@@ -224,7 +224,7 @@ private fun HomeGoalButton(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Select metric",
                         modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 } else {
                     val progress = goal.progress()
@@ -276,7 +276,7 @@ private fun HomeGoalButton(
             Text(
                 text = "Add Goal",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
         }

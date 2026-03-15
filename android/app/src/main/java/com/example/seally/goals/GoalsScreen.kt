@@ -208,7 +208,7 @@ fun GoalsScreen(
                         Surface(
                             modifier = Modifier.padding(24.dp),
                             shape = RoundedCornerShape(28.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            color = MaterialTheme.colorScheme.surface,
                             tonalElevation = 2.dp
                         ) {
                             Column(
@@ -308,7 +308,7 @@ private fun GoalCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shadowElevation = 2.dp
     ) {

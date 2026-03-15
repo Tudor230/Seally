@@ -400,7 +400,7 @@ private fun StatCard(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
         shadowElevation = 1.dp
     ) {
@@ -587,7 +587,7 @@ private fun MacroOverviewPanel(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
         shadowElevation = 1.dp
     ) {
@@ -716,7 +716,7 @@ private fun MealCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shadowElevation = 1.dp
     ) {
@@ -974,7 +974,7 @@ private fun WaterTrackingPage(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 2.dp,
             shadowElevation = 2.dp
         ) {

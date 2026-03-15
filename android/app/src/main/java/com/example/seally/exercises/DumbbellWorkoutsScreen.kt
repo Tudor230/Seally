@@ -1,5 +1,6 @@
 package com.example.seally.exercises
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -50,7 +51,7 @@ fun DumbbellWorkoutsScreen(
             ) {
                 IconButton(
                     onClick = onBackClick,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), CircleShape)
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), CircleShape)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -118,8 +119,9 @@ private fun WorkoutPlanCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

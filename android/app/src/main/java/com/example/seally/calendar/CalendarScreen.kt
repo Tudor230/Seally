@@ -183,7 +183,7 @@ fun CalendarScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.surface,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
