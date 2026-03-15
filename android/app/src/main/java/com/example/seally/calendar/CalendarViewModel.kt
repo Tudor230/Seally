@@ -29,6 +29,7 @@ data class ExerciseEntry(
     val metric: String,
     val value: String,
     val sourceLogId: String? = null,
+    val presetName: String? = null,
 )
 
 data class ExerciseCatalogEntry(
@@ -262,6 +263,7 @@ class CalendarViewModel(application: Application) : AndroidViewModel(application
                     name = exercise.exerciseName,
                     metric = metric,
                     value = formatMetricValue(exercise.quantity),
+                    presetName = preset.name,
                 )
             }
             TrainingPresetUiModel(id = preset.id, name = preset.name, exercises = exercises)
