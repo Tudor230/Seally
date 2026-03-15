@@ -13,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Female
+import androidx.compose.material.icons.filled.Male
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,10 +29,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val mActivityLevels = listOf(
     "Sedentary", "Lightly Active", "Moderately Active", "Very Active", "Extra Active"
-)
-
-private val mJourneyOptions = listOf(
-    "Lose weight", "Gain weight", "Maintain weight"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,14 +46,16 @@ fun SettingsScreen(
     // Settings State
     var activityType by remember { mutableStateOf("") }
     var workoutDays by remember { mutableIntStateOf(3) }
-    var journeyGoal by remember { mutableStateOf("") }
+    var ageText by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("") }
     var waterTargetMlText by remember { mutableStateOf("") }
 
     LaunchedEffect(profile) {
         profile?.let { p ->
             activityType = p.activityType
             workoutDays = p.workoutDaysPerWeek ?: 3
-            journeyGoal = p.journeyGoal
+            ageText = p.age?.toString().orEmpty()
+            gender = p.gender
             waterTargetMlText = p.waterTargetMl?.toString().orEmpty()
         }
     }
@@ -135,16 +135,40 @@ fun SettingsScreen(
                 }
             }
 
-            // Journey Goal Section
-            SettingsSection(title = "Journey Goal") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    mJourneyOptions.forEach { option ->
-                        SelectableOption(
-                            title = option,
-                            isSelected = journeyGoal == option,
-                            onClick = { journeyGoal = option }
-                        )
-                    }
+            // Age & Gender Section
+            SettingsSection(title = "Age") {
+                OutlinedTextField(
+                    value = ageText,
+                    onValueChange = { ageText = it.filter { c -> c.isDigit() } },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = outline,
+                        focusedContainerColor = cardContainer,
+                        unfocusedContainerColor = cardContainer,
+                        focusedTextColor = onSurfaceColor,
+                        unfocusedTextColor = onSurfaceColor
+                    )
+                )
+            }
+
+            SettingsSection(title = "Gender") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GenderButton(
+                        text = "Male",
+                        isSelected = gender == "male",
+                        onClick = { gender = "male" }
+                    )
+                    GenderButton(
+                        text = "Female",
+                        isSelected = gender == "female",
+                        onClick = { gender = "female" }
+                    )
                 }
             }
 
@@ -193,7 +217,8 @@ fun SettingsScreen(
                             p.copy(
                                 activityType = activityType,
                                 workoutDaysPerWeek = workoutDays,
-                                journeyGoal = journeyGoal,
+                                age = ageText.toIntOrNull(),
+                                gender = gender,
                                 waterTargetMl = waterTargetMlText.toIntOrNull() ?: p.waterTargetMl
                             )
                         )
@@ -278,6 +303,25 @@ private fun DayChip(day: Int, isSelected: Boolean, onClick: () -> Unit) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(day.toString(), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun RowScope.GenderButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
+    val buttonModifier = Modifier.weight(1f)
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+        modifier = buttonModifier
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            Text(text, color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         }
     }
 }

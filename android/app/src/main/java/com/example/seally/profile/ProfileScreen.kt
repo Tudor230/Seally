@@ -10,6 +10,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Female
+import androidx.compose.material.icons.filled.Male
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,6 +67,8 @@ fun ProfileScreen(
     var heightCmText by remember { mutableStateOf("") }
     var weightKgText by remember { mutableStateOf("") }
     var goalWeightKgText by remember { mutableStateOf("") }
+    var ageText by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("") }
 
     // Sync state with Profile data
     LaunchedEffect(profile) {
@@ -73,6 +77,8 @@ fun ProfileScreen(
             heightCmText = currentProfile.heightCm?.toString().orEmpty()
             weightKgText = currentProfile.weightKg?.let { stripTrailingZeros(it) }.orEmpty()
             goalWeightKgText = currentProfile.goalWeightKg?.let { stripTrailingZeros(it) }.orEmpty()
+            ageText = currentProfile.age?.toString().orEmpty()
+            gender = currentProfile.gender
         }
     }
 
@@ -82,11 +88,13 @@ fun ProfileScreen(
     val heightCm = heightCmText.toIntOrNull()
     val weightKg = weightKgText.toFloatOrNull()
     val goalWeightKg = goalWeightKgText.toFloatOrNull()
+    val age = ageText.toIntOrNull()
 
     val heightError = heightCmText.isNotBlank() && (heightCm == null || heightCm !in 50..260)
     val weightError = weightKgText.isNotBlank() && (weightKg == null || weightKg !in 20f..400f)
     val goalWeightError = goalWeightKgText.isNotBlank() && (goalWeightKg == null || goalWeightKg !in 20f..400f)
-    val canSave = !heightError && !weightError && !goalWeightError && name.isNotBlank()
+    val ageError = ageText.isNotBlank() && (age == null || age !in 10..120)
+    val canSave = !heightError && !weightError && !goalWeightError && !ageError && name.isNotBlank()
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -215,6 +223,65 @@ fun ProfileScreen(
                             }
                         }
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = ageText,
+                            onValueChange = { ageText = it.filterNumeric(3) },
+                            label = { Text("Age") },
+                            placeholder = { Text("years") },
+                            modifier = Modifier.weight(1f),
+                            isError = ageError,
+                            shape = fieldShape,
+                            colors = friendlyOutlinedTextFieldColors(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            supportingText = {
+                                if (ageError) {
+                                    Text("10–120 years", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        )
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            ExposedDropdownMenuBox(
+                                expanded = false,
+                                onExpandedChange = {},
+                            ) {
+                                OutlinedTextField(
+                                    value = if (gender == "male") "Male" else if (gender == "female") "Female" else "",
+                                    onValueChange = {},
+                                    label = { Text("Gender") },
+                                    readOnly = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    shape = fieldShape,
+                                    colors = friendlyOutlinedTextFieldColors(),
+                                    trailingIcon = {
+                                        Row {
+                                            IconButton(onClick = { gender = "male" }) {
+                                                Icon(
+                                                    Icons.Default.Male,
+                                                    contentDescription = "Male",
+                                                    tint = if (gender == "male") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            IconButton(onClick = { gender = "female" }) {
+                                                Icon(
+                                                    Icons.Default.Female,
+                                                    contentDescription = "Female",
+                                                    tint = if (gender == "female") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -226,9 +293,10 @@ fun ProfileScreen(
                             heightCm = heightCm,
                             weightKg = weightKg,
                             goalWeightKg = goalWeightKg,
+                            age = age,
+                            gender = gender,
                             activityType = currentProfile.activityType,
                             workoutDaysPerWeek = currentProfile.workoutDaysPerWeek,
-                            journeyGoal = currentProfile.journeyGoal,
                             waterTargetMl = currentProfile.waterTargetMl,
                             onboardingCompleted = currentProfile.onboardingCompleted,
                         )
