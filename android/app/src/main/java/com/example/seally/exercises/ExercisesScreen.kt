@@ -175,9 +175,9 @@ fun ExercisesScreen(
         mTodayPlannedWorkout.take(2).joinToString(" • ") { it.toWorkoutSummary() }
     }
     val mHasWorkoutForToday = mTodayWorkout.isNotEmpty() || mTodayPlannedWorkout.isNotEmpty()
-    val musclesImageRequest = ImageRequest.Builder(context)
-        .data("file:///android_asset/seals/muscles.png")
-        .build()
+//    val musclesImageRequest = ImageRequest.Builder(context)
+//        .data("file:///android_asset/seals/muscles.png")
+//        .build()
 
     Box(
         modifier = modifier.fillMaxSize()

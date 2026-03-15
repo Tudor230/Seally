@@ -402,6 +402,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
             targetMl = waterTargetMl,
         )
         mXpProjectionRepository.setTodayPendingXp(projectedNutritionXp + projectedWaterXp)
+    }
     private fun observeGoalTargets() {
         viewModelScope.launch {
             mTargetRepository.observeTargets().collectLatest { targets ->
