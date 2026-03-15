@@ -8,6 +8,7 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.seally.data.repository.ExerciseLogRepository
 import com.example.seally.livekit.LandmarkPacketEncoder
 import com.example.seally.livekit.LiveKitPublisher
 import com.google.mediapipe.tasks.components.containers.Landmark
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 data class CameraUiState(
     val mHasCameraPermission: Boolean = false,
@@ -57,6 +59,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var mPendingLensSwitchToken: Int? = null
     private var mHasAttemptedWarmup: Boolean = false
     private val mLiveKitPublisher = LiveKitPublisher(getApplication())
+    private val mExerciseLogRepository = ExerciseLogRepository(getApplication())
     private var mIsLiveKitConnecting: Boolean = false
     private var mLandmarkSequence: Long = 0L
     private var mLastLandmarkSentAtMs: Long = 0L
@@ -298,34 +301,77 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setSelectedExercise(mExerciseType: ExerciseType) {
         val currentState = mUiState.value
         if (currentState.mSelectedExercise == mExerciseType) return
-        mSquatFormFeedbackEngine.reset()
-        mPlankFormFeedbackEngine.reset()
-        mPullUpFormFeedbackEngine.reset()
-        mPushUpFormFeedbackEngine.reset()
+        persistCurrentExerciseSessionIfNeeded(currentState)
+        resetExerciseEnginesAndFeedback()
         mUiState.update {
             it.copy(
                 mSelectedExercise = mExerciseType,
-                mFormFeedback = FormFeedback(),
             )
         }
     }
 
     fun toggleExerciseMode() {
-        mSquatFormFeedbackEngine.reset()
-        mPlankFormFeedbackEngine.reset()
-        mPullUpFormFeedbackEngine.reset()
-        mPushUpFormFeedbackEngine.reset()
-        mUiState.update { currentState ->
-            currentState.copy(
-                mSelectedExercise = when (currentState.mSelectedExercise) {
+        val currentState = mUiState.value
+        persistCurrentExerciseSessionIfNeeded(currentState)
+        resetExerciseEnginesAndFeedback()
+        mUiState.update { state ->
+            state.copy(
+                mSelectedExercise = when (state.mSelectedExercise) {
                     ExerciseType.SQUAT -> ExerciseType.PLANK
                     ExerciseType.PLANK -> ExerciseType.PULLUP
                     ExerciseType.PULLUP -> ExerciseType.PUSHUP
                     ExerciseType.PUSHUP -> ExerciseType.SQUAT
                 },
-                mFormFeedback = FormFeedback(),
             )
         }
+    }
+
+    fun persistExerciseSessionOnExit() {
+        persistCurrentExerciseSessionIfNeeded(mUiState.value)
+        resetExerciseEnginesAndFeedback()
+    }
+
+    private fun persistCurrentExerciseSessionIfNeeded(state: CameraUiState) {
+        val exerciseType = state.mSelectedExercise
+        val feedback = state.mFormFeedback
+        val quantity = when (exerciseType) {
+            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> feedback.mRepCount.toDouble()
+            ExerciseType.PLANK -> feedback.mHoldDurationMs / 1000.0
+        }
+        if (quantity <= 0.0) return
+
+        val metric = when (exerciseType) {
+            ExerciseType.SQUAT, ExerciseType.PULLUP, ExerciseType.PUSHUP -> "reps"
+            ExerciseType.PLANK -> "seconds"
+        }
+        val exerciseName = when (exerciseType) {
+            ExerciseType.SQUAT -> "Squat"
+            ExerciseType.PLANK -> "Plank"
+            ExerciseType.PULLUP -> "Pull-up"
+            ExerciseType.PUSHUP -> "Push-up"
+        }
+        val date = LocalDate.now().toString()
+
+        viewModelScope.launch {
+            runCatching {
+                mExerciseLogRepository.addLog(
+                    exerciseName = exerciseName,
+                    quantity = quantity,
+                    metric = metric,
+                    date = date,
+                )
+            }.onFailure { error ->
+                Log.e(mTag, "Failed to persist exercise session", error)
+            }
+        }
+    }
+
+    private fun resetExerciseEnginesAndFeedback() {
+        mSquatFormFeedbackEngine.reset()
+        mPlankFormFeedbackEngine.reset()
+        mPullUpFormFeedbackEngine.reset()
+        mPushUpFormFeedbackEngine.reset()
+        mUiState.update { it.copy(mFormFeedback = FormFeedback()) }
     }
 
     private fun ensureLiveKitConnected(roomCode: String) {
