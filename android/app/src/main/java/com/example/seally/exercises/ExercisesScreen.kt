@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.seally.calendar.CalendarScreen
@@ -32,6 +33,7 @@ import com.example.seally.data.local.entity.CalendarPlanEntryEntity
 import com.example.seally.data.local.entity.ExerciseLogEntity
 import com.example.seally.data.repository.CalendarPlanRepository
 import com.example.seally.data.repository.ExerciseLogRepository
+import com.example.seally.profile.ProfileViewModel
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import java.time.LocalDate
@@ -50,6 +52,10 @@ fun ExercisesScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var mSelectedExerciseForChecker by remember { mutableStateOf<ExerciseType?>(null) }
     val mIsOnSubpage = mSelectedExerciseForChecker != null || showDumbbellPage || showCalendar
+    val context = LocalContext.current
+    val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(context))
+    val profile by profileViewModel.profile.collectAsState()
+    val diseaseIds = profile?.diseaseIds ?: emptySet()
 
     LaunchedEffect(mIsOnSubpage) {
         onDetailVisibilityChanged(!mIsOnSubpage)
@@ -101,6 +107,7 @@ fun ExercisesScreen(
                 mCameraViewModel.setSelectedExercise(mExercise)
                 mSelectedExerciseForChecker = mExercise
             },
+            diseaseIds = diseaseIds,
         )
         return
     }
@@ -113,7 +120,6 @@ fun ExercisesScreen(
         return
     }
 
-    val context = LocalContext.current
     val mExerciseLogRepository = remember(context) { ExerciseLogRepository(context.applicationContext) }
     val mCalendarPlanRepository = remember(context) { CalendarPlanRepository(context.applicationContext) }
     val mTodayDate = remember { LocalDate.now().toString() }

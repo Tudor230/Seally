@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.seally.health.DiseaseGuidance
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +70,7 @@ fun ProfileScreen(
     var goalWeightKgText by remember { mutableStateOf("") }
     var ageText by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("") }
+    var selectedDiseaseIds by remember { mutableStateOf(setOf<String>()) }
 
     // Sync state with Profile data
     LaunchedEffect(profile) {
@@ -79,6 +81,7 @@ fun ProfileScreen(
             goalWeightKgText = currentProfile.goalWeightKg?.let { stripTrailingZeros(it) }.orEmpty()
             ageText = currentProfile.age?.toString().orEmpty()
             gender = currentProfile.gender
+            selectedDiseaseIds = currentProfile.diseaseIds
         }
     }
 
@@ -280,6 +283,24 @@ fun ProfileScreen(
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Health conditions",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "We'll show warnings for foods and exercises that may not fit your conditions.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    DiseaseSelectionGrid(
+                        selectedDiseaseIds = selectedDiseaseIds,
+                        onSelectedDiseaseIdsChange = { selectedDiseaseIds = it },
+                    )
                 }
             }
 
@@ -296,6 +317,7 @@ fun ProfileScreen(
                             activityType = currentProfile.activityType,
                             workoutDaysPerWeek = currentProfile.workoutDaysPerWeek,
                             waterTargetMl = currentProfile.waterTargetMl,
+                            diseaseIds = selectedDiseaseIds,
                             onboardingCompleted = currentProfile.onboardingCompleted,
                         )
                     )
@@ -339,6 +361,62 @@ private fun String.filterDecimal(maxLen: Int): String {
         }
     }
     return if (filtered.length <= maxLen) filtered else filtered.take(maxLen)
+}
+
+@Composable
+private fun DiseaseSelectionGrid(
+    selectedDiseaseIds: Set<String>,
+    onSelectedDiseaseIdsChange: (Set<String>) -> Unit,
+) {
+    val diseases = DiseaseGuidance.commonDiseases
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        diseases.chunked(2).forEach { rowItems ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowItems.forEach { disease ->
+                    val isSelected = selectedDiseaseIds.contains(disease.id)
+                    DiseaseChip(
+                        text = disease.label,
+                        isSelected = isSelected,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val updated = if (isSelected) {
+                                selectedDiseaseIds - disease.id
+                            } else {
+                                selectedDiseaseIds + disease.id
+                            }
+                            onSelectedDiseaseIdsChange(updated)
+                        },
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiseaseChip(
+    text: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.heightIn(min = 44.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                text = text,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
 }
 
 private fun stripTrailingZeros(value: Float): String {

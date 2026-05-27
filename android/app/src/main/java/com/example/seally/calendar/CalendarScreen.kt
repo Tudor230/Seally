@@ -24,12 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.seally.health.DiseaseGuidance
+import com.example.seally.profile.ProfileViewModel
 import com.example.seally.ui.components.AppScreenBackground
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -53,6 +56,10 @@ fun CalendarScreen(
     onBackClick: () -> Unit = {},
     viewModel: CalendarViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(context))
+    val profile by profileViewModel.profile.collectAsState()
+    val diseaseIds = profile?.diseaseIds ?: emptySet()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     
@@ -119,7 +126,8 @@ fun CalendarScreen(
                             draftExercises.addAll(existing)
                             currentSubPage = CalendarSubPage.WORKOUT_PLANNER
                         },
-                        onOpenPresets = { currentSubPage = CalendarSubPage.PRESET_MANAGER }
+                        onOpenPresets = { currentSubPage = CalendarSubPage.PRESET_MANAGER },
+                        diseaseIds = diseaseIds,
                     )
                 }
                 CalendarSubPage.PRESET_MANAGER -> {
@@ -149,6 +157,7 @@ fun CalendarScreen(
                         onNameChange = { presetDraftName = it },
                         draftExercises = draftExercises,
                         onBackClick = { currentSubPage = CalendarSubPage.PRESET_MANAGER },
+                        diseaseIds = diseaseIds,
                         onSave = { name, exercises ->
                             viewModel.savePreset(editingPreset?.id, name, exercises) { didSave ->
                                 if (didSave) {
@@ -186,6 +195,7 @@ fun CalendarScreen(
                             viewModel.savePlan(selectedDate, draftExercises.toList())
                             currentSubPage = CalendarSubPage.CALENDAR
                         },
+                        diseaseIds = diseaseIds,
                         onPickExercise = { index ->
                             exerciseTargetIndex = index
                             exercisePickerReturnPage = CalendarSubPage.WORKOUT_PLANNER
@@ -232,7 +242,8 @@ fun MainCalendarContent(
     onBackClick: () -> Unit,
     onDaySelected: (LocalDate) -> Unit,
     onOpenPlanner: () -> Unit,
-    onOpenPresets: () -> Unit
+    onOpenPresets: () -> Unit,
+    diseaseIds: Set<String>,
 ) {
     val scope = rememberCoroutineScope()
     val startMonth = remember { YearMonth.from(today) }
@@ -309,7 +320,8 @@ fun MainCalendarContent(
             today = today, 
             workouts = workoutByDate[selectedDate].orEmpty(), 
             plans = planByDate[selectedDate].orEmpty(), 
-            onOpenPlanner = onOpenPlanner
+            onOpenPlanner = onOpenPlanner,
+            diseaseIds = diseaseIds,
         )
         
         Spacer(modifier = Modifier.weight(1f))
@@ -352,7 +364,14 @@ fun MainCalendarContent(
 }
 
 @Composable
-fun DaySummaryCard(date: LocalDate, today: LocalDate, workouts: List<ExerciseEntry>, plans: List<ExerciseEntry>, onOpenPlanner: () -> Unit) {
+fun DaySummaryCard(
+    date: LocalDate,
+    today: LocalDate,
+    workouts: List<ExerciseEntry>,
+    plans: List<ExerciseEntry>,
+    onOpenPlanner: () -> Unit,
+    diseaseIds: Set<String>,
+) {
     val displayExercises = when {
         date.isBefore(today) -> workouts
         date == today -> if (workouts.isNotEmpty()) workouts else plans
@@ -437,13 +456,22 @@ fun DaySummaryCard(date: LocalDate, today: LocalDate, workouts: List<ExerciseEnt
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                                     Box(modifier = Modifier.size(6.dp).background(if (presetName != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary, CircleShape))
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = exercise.name, 
-                                        style = MaterialTheme.typography.bodyMedium, 
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    val warningLabels = DiseaseGuidance.exerciseNotRecommendedForName(exercise.name, diseaseIds)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = exercise.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        if (warningLabels.isNotEmpty()) {
+                                            Text(
+                                                text = "Not recommended for: ${warningLabels.joinToString(", ")}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
                                     Text(
                                         text = "${exercise.value} ${exercise.metric}", 
                                         style = MaterialTheme.typography.bodyMedium, 
@@ -578,6 +606,7 @@ fun PresetEditorPage(
     onNameChange: (String) -> Unit,
     draftExercises: androidx.compose.runtime.snapshots.SnapshotStateList<ExerciseEntry>,
     onBackClick: () -> Unit,
+    diseaseIds: Set<String>,
     onSave: (String, List<ExerciseEntry>) -> Unit,
     onPickExercise: (Int) -> Unit,
 ) {
@@ -621,7 +650,13 @@ fun PresetEditorPage(
                 }
             } else {
                 draftExercises.forEachIndexed { index, entry ->
-                    ExerciseEditItem(entry = entry, onUpdate = { draftExercises[index] = it }, onRemove = { draftExercises.removeAt(index) }, onPickExercise = { onPickExercise(index) })
+                    ExerciseEditItem(
+                        entry = entry,
+                        onUpdate = { draftExercises[index] = it },
+                        onRemove = { draftExercises.removeAt(index) },
+                        onPickExercise = { onPickExercise(index) },
+                        warningLabels = DiseaseGuidance.exerciseNotRecommendedForName(entry.name, diseaseIds),
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 if (!hasValidExercises) {
@@ -663,6 +698,7 @@ fun WorkoutPlannerPage(
     onApplyPreset: (TrainingPresetUiModel) -> Unit, 
     onClear: () -> Unit, 
     onSave: () -> Unit, 
+    diseaseIds: Set<String>,
     onPickExercise: (Int) -> Unit
 ) {
     var showPresetPicker by remember { mutableStateOf(false) }
@@ -752,7 +788,8 @@ fun WorkoutPlannerPage(
                                 entry = entry, 
                                 onUpdate = { draftExercises[originalIndex] = it }, 
                                 onRemove = { draftExercises.removeAt(originalIndex) }, 
-                                onPickExercise = { onPickExercise(originalIndex) }
+                                onPickExercise = { onPickExercise(originalIndex) },
+                                warningLabels = DiseaseGuidance.exerciseNotRecommendedForName(entry.name, diseaseIds),
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                         }
@@ -842,7 +879,13 @@ fun WorkoutPlannerPage(
 }
 
 @Composable
-fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, onRemove: () -> Unit, onPickExercise: () -> Unit) {
+fun ExerciseEditItem(
+    entry: ExerciseEntry,
+    onUpdate: (ExerciseEntry) -> Unit,
+    onRemove: () -> Unit,
+    onPickExercise: () -> Unit,
+    warningLabels: List<String> = emptyList(),
+) {
     val nameError = entry.name.isBlank()
     val valueError = entry.value.isNotBlank() && (entry.value.toDoubleOrNull()?.let { it > 0.0 } != true)
     Surface(
@@ -881,6 +924,13 @@ fun ExerciseEditItem(entry: ExerciseEntry, onUpdate: (ExerciseEntry) -> Unit, on
             if (nameError) {
                 Text(
                     text = "Select an exercise name.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            if (warningLabels.isNotEmpty()) {
+                Text(
+                    text = "Not recommended for: ${warningLabels.joinToString(", ")}",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelSmall,
                 )

@@ -10,6 +10,7 @@ data class UserProfile(
     val activityType: String = "",
     val workoutDaysPerWeek: Int? = null,
     val waterTargetMl: Int? = null,
+    val diseaseIds: Set<String> = emptySet(),
     val onboardingCompleted: Boolean = false,
 )
 

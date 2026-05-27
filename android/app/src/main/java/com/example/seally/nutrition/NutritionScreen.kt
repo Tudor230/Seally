@@ -60,6 +60,8 @@ import com.example.seally.data.repository.DailyGoalProgressRepository
 import com.example.seally.data.repository.NutritionFoodEntryRepository
 import com.example.seally.data.repository.NutritionLogRepository
 import com.example.seally.data.repository.TargetRepository
+import com.example.seally.health.DiseaseGuidance
+import com.example.seally.profile.ProfileViewModel
 import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import com.example.seally.xp.XpCalculators
@@ -473,6 +475,9 @@ fun NutritionScreen(
     var foodPendingDeletion by remember { mutableStateOf<FoodEntry?>(null) }
 
     val context = LocalContext.current
+    val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(context))
+    val profile by profileViewModel.profile.collectAsState()
+    val diseaseIds = profile?.diseaseIds ?: emptySet()
     val mBackgroundAssetPath = when (currentPage) {
         NutritionPage.Kitchen -> "backgrounds/kitchen.png"
         NutritionPage.Food -> "backgrounds/food_track.png"
@@ -552,6 +557,7 @@ fun NutritionScreen(
                         sugarTarget = sugarGoalTarget,
                         fibersConsumed = fibersConsumed,
                         fiberTarget = fiberGoalTarget,
+                        diseaseIds = diseaseIds,
                         onBack = mViewModel::navigateBackInNutrition,
                         onOpenCamera = mViewModel::openCameraPage,
                         onManualAddFood = mViewModel::addManualFood,
@@ -566,6 +572,7 @@ fun NutritionScreen(
                     )
                     NutritionPage.Camera -> CameraTrackingPage(
                         onBack = mViewModel::navigateBackInNutrition,
+                        diseaseIds = diseaseIds,
                         onAddFoodFromScan = mViewModel::addScannedFood,
                     )
                 }
@@ -753,6 +760,7 @@ private fun FoodTrackingPage(
     sugarTarget: Int?,
     fibersConsumed: Int,
     fiberTarget: Int?,
+    diseaseIds: Set<String>,
     onBack: () -> Unit,
     onOpenCamera: () -> Unit,
     onManualAddFood: (FoodEntry) -> Unit,
@@ -821,6 +829,7 @@ private fun FoodTrackingPage(
                         mealType = mealType,
                         mealFoods = foods.filter { it.meal == mealType },
                         onRemoveFood = onRemoveFood,
+                        diseaseIds = diseaseIds,
                         onAddClick = {
                             pendingMealType = mealType
                             shouldShowAddFoodSheet = true
@@ -851,7 +860,8 @@ private fun FoodTrackingPage(
     if (shouldShowAddFoodSheet) {
         AddFoodSheet(
             initialMealType = pendingMealType,
-            onDismiss = { 
+            diseaseIds = diseaseIds,
+            onDismiss = {
                 shouldShowAddFoodSheet = false
                 pendingMealType = null
             },
@@ -1021,7 +1031,8 @@ private fun MealCard(
     mealType: MealType,
     mealFoods: List<FoodEntry>,
     onAddClick: () -> Unit,
-    onRemoveFood: (FoodEntry) -> Unit
+    onRemoveFood: (FoodEntry) -> Unit,
+    diseaseIds: Set<String>,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1080,6 +1091,7 @@ private fun MealCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 mealFoods.forEach { food ->
+                    val warningLabels = DiseaseGuidance.foodNotRecommendedFor(food.name, diseaseIds)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1099,6 +1111,14 @@ private fun MealCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (warningLabels.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Not recommended for: ${warningLabels.joinToString(", ")}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val mIcon = when (food.ratingCategory) {
@@ -1406,6 +1426,7 @@ private fun WaterTrackingPage(
 @Composable
 private fun CameraTrackingPage(
     onBack: () -> Unit,
+    diseaseIds: Set<String>,
     onAddFoodFromScan: (FoodEntry) -> Unit,
 ) {
     var mScannedResult by remember { mutableStateOf<NutritionLabelScanResult?>(null) }
@@ -1420,6 +1441,7 @@ private fun CameraTrackingPage(
     mScannedResult?.let { scannedResult ->
         AddScannedFoodSheet(
             suggestion = scannedResult,
+            diseaseIds = diseaseIds,
             onDismiss = { mScannedResult = null },
             onAddFood = { newFood ->
                 onAddFoodFromScan(newFood)
@@ -1433,6 +1455,7 @@ private fun CameraTrackingPage(
 @Composable
 private fun AddFoodSheet(
     initialMealType: MealType? = null,
+    diseaseIds: Set<String>,
     onDismiss: () -> Unit,
     onAddFood: (FoodEntry) -> Unit,
 ) {
@@ -1454,6 +1477,7 @@ private fun AddFoodSheet(
     val caloriesValue = caloriesText.toIntOrNull()
     val caloriesError = caloriesText.isNotBlank() && (caloriesValue == null || caloriesValue <= 0)
     val canAddFoodEntry = name.isNotBlank() && caloriesValue != null && caloriesValue > 0
+    val warningLabels = DiseaseGuidance.foodNotRecommendedFor(name, diseaseIds)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1537,6 +1561,21 @@ private fun AddFoodSheet(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+
+            if (warningLabels.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Not recommended for: ${warningLabels.joinToString(", ")}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
             }
 
             if (initialMealType == null) {
@@ -1683,6 +1722,7 @@ private fun NutritionField(
 @Composable
 private fun AddScannedFoodSheet(
     suggestion: NutritionLabelScanResult,
+    diseaseIds: Set<String>,
     onDismiss: () -> Unit,
     onAddFood: (FoodEntry) -> Unit,
 ) {
@@ -1715,6 +1755,7 @@ private fun AddScannedFoodSheet(
     val scaledFats = scaleNutritionValue(baseFats, selectedQuantity.multiplier)
     val scaledSugars = scaleNutritionValue(baseSugars, selectedQuantity.multiplier)
     val scaledFibers = scaleNutritionValue(baseFibers, selectedQuantity.multiplier)
+    val warningLabels = DiseaseGuidance.foodNotRecommendedFor(name, diseaseIds)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1859,6 +1900,21 @@ private fun AddScannedFoodSheet(
                         NutritionValueLabel("Sugars", "$scaledSugars", "g")
                         NutritionValueLabel("Fibers", "$scaledFibers", "g")
                     }
+                }
+            }
+
+            if (warningLabels.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Not recommended for: ${warningLabels.joinToString(", ")}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(12.dp),
+                    )
                 }
             }
 

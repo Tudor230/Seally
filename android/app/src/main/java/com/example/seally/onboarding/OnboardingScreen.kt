@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.seally.goals.GoalsViewModel
+import com.example.seally.health.DiseaseGuidance
 import com.example.seally.profile.ProfileViewModel
 import com.example.seally.profile.UserProfile
 import com.example.seally.ui.components.AppScreenBackground
@@ -38,6 +39,7 @@ private enum class OnboardingStep {
     PROFILE,
     ACTIVITY,
     DEMOGRAPHICS,
+    HEALTH,
     SUMMARY,
 }
 
@@ -76,6 +78,7 @@ fun OnboardingScreen(
     var mAge by rememberSaveable { mutableStateOf("") }
     var mGender by rememberSaveable { mutableStateOf("") }
     var mWaterTargetMl by rememberSaveable { mutableStateOf("2500") }
+    var mSelectedDiseaseIds by remember { mutableStateOf(setOf<String>()) }
 
     // Sync from profile when it first loads
     LaunchedEffect(mProfileState) {
@@ -89,6 +92,7 @@ fun OnboardingScreen(
             if (p.age != null) mAge = p.age.toString()
             if (p.gender.isNotBlank()) mGender = p.gender
             mWaterTargetMl = p.waterTargetMl?.toString() ?: "2500"
+            if (p.diseaseIds.isNotEmpty()) mSelectedDiseaseIds = p.diseaseIds
         }
     }
 
@@ -118,7 +122,8 @@ fun OnboardingScreen(
         OnboardingStep.WELCOME -> 0.1f
         OnboardingStep.PROFILE -> 0.3f
         OnboardingStep.ACTIVITY -> 0.5f
-        OnboardingStep.DEMOGRAPHICS -> 0.7f
+        OnboardingStep.DEMOGRAPHICS -> 0.6f
+        OnboardingStep.HEALTH -> 0.75f
         OnboardingStep.SUMMARY -> 0.9f
     }
 
@@ -145,7 +150,8 @@ fun OnboardingScreen(
                                     OnboardingStep.PROFILE -> OnboardingStep.WELCOME
                                     OnboardingStep.ACTIVITY -> OnboardingStep.PROFILE
                                     OnboardingStep.DEMOGRAPHICS -> OnboardingStep.ACTIVITY
-                                    OnboardingStep.SUMMARY -> OnboardingStep.DEMOGRAPHICS
+                                    OnboardingStep.HEALTH -> OnboardingStep.DEMOGRAPHICS
+                                    OnboardingStep.SUMMARY -> OnboardingStep.HEALTH
                                     else -> mStep
                                 }
                             }) {
@@ -201,10 +207,16 @@ fun OnboardingScreen(
                             !mAgeError && mAgeValue != null && !mGenderError,
                             mAgeError = mAgeError,
                             mGenderError = mGenderError,
+                        ) { mStep = OnboardingStep.HEALTH }
+
+                        OnboardingStep.HEALTH -> DiseaseSelectionStep(
+                            selectedDiseaseIds = mSelectedDiseaseIds,
+                            onSelectedDiseaseIdsChange = { mSelectedDiseaseIds = it },
                         ) { mStep = OnboardingStep.SUMMARY }
 
                         OnboardingStep.SUMMARY -> SummaryStep(
                             mName, mWeightKg, mDesiredWeightKg, mHeightCm, mActivityType, mWorkoutDays, mAge, mGender, mWaterTargetMl,
+                            mSelectedDiseaseIds,
                             onFinish = {
                                 val weightVal = mWeightValue ?: 0f
                                 val heightVal = (mHeightValue ?: 0).toFloat()
@@ -236,6 +248,7 @@ fun OnboardingScreen(
                                         activityType = mActivityType,
                                         workoutDaysPerWeek = mWorkoutDays,
                                         waterTargetMl = mWaterTargetValue,
+                                        diseaseIds = mSelectedDiseaseIds,
                                         onboardingCompleted = true,
                                     ),
                                 )
@@ -421,8 +434,31 @@ private fun DemographicsStep(
 }
 
 @Composable
+private fun DiseaseSelectionStep(
+    selectedDiseaseIds: Set<String>,
+    onSelectedDiseaseIdsChange: (Set<String>) -> Unit,
+    onNext: () -> Unit,
+) {
+    OnboardingCard(title = "Health conditions") {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "Select any conditions you have. We'll show warnings for foods and exercises that may not fit.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            DiseaseSelectionGrid(
+                selectedDiseaseIds = selectedDiseaseIds,
+                onSelectedDiseaseIdsChange = onSelectedDiseaseIdsChange,
+            )
+        }
+    }
+    OnboardingButton(text = "CONTINUE", onClick = onNext)
+}
+
+@Composable
 private fun SummaryStep(
     name: String, weightStr: String, goalWeight: String, heightStr: String, activity: String, workouts: Int, age: String, gender: String, water: String,
+    diseaseIds: Set<String>,
     onFinish: () -> Unit
 ) {
     val weightVal = weightStr.toFloatOrNull() ?: 0f
@@ -460,6 +496,12 @@ private fun SummaryStep(
                     SummaryRow("Maintenance", "$tdee kcal", MaterialTheme.colorScheme.onSurfaceVariant)
                     SummaryRow("Water Goal", "$water ml", MaterialTheme.colorScheme.tertiary)
                     SummaryRow("Workouts", "$workouts days/week", MaterialTheme.colorScheme.secondary)
+                    val diseaseLabels = DiseaseGuidance.diseaseLabels(diseaseIds)
+                    SummaryRow(
+                        "Health",
+                        if (diseaseLabels.isEmpty()) "None selected" else diseaseLabels.joinToString(", "),
+                        MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             }
             
@@ -479,6 +521,63 @@ private fun SummaryRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         Text(value, color = valueColor, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun DiseaseSelectionGrid(
+    selectedDiseaseIds: Set<String>,
+    onSelectedDiseaseIdsChange: (Set<String>) -> Unit,
+) {
+    val diseases = DiseaseGuidance.commonDiseases
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        diseases.chunked(2).forEach { rowItems ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowItems.forEach { disease ->
+                    val isSelected = selectedDiseaseIds.contains(disease.id)
+                    DiseaseChip(
+                        text = disease.label,
+                        isSelected = isSelected,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            val updated = if (isSelected) {
+                                selectedDiseaseIds - disease.id
+                            } else {
+                                selectedDiseaseIds + disease.id
+                            }
+                            onSelectedDiseaseIdsChange(updated)
+                        },
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiseaseChip(
+    text: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.heightIn(min = 44.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                text = text,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

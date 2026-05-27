@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -25,6 +26,7 @@ class ProfileRepository(
         val ACTIVITY_TYPE = stringPreferencesKey("activity_type")
         val WORKOUT_DAYS_PER_WEEK = intPreferencesKey("workout_days_per_week")
         val WATER_TARGET_ML = intPreferencesKey("water_target_ml")
+        val DISEASE_IDS = stringSetPreferencesKey("disease_ids")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     }
 
@@ -39,6 +41,7 @@ class ProfileRepository(
             activityType = prefs[Keys.ACTIVITY_TYPE] ?: "",
             workoutDaysPerWeek = prefs[Keys.WORKOUT_DAYS_PER_WEEK],
             waterTargetMl = prefs[Keys.WATER_TARGET_ML],
+            diseaseIds = prefs[Keys.DISEASE_IDS] ?: emptySet(),
             onboardingCompleted = prefs[Keys.ONBOARDING_COMPLETED] ?: false,
         )
     }
@@ -55,6 +58,7 @@ class ProfileRepository(
             if (profile.activityType.isBlank()) prefs.remove(Keys.ACTIVITY_TYPE) else prefs[Keys.ACTIVITY_TYPE] = profile.activityType
             if (profile.workoutDaysPerWeek == null) prefs.remove(Keys.WORKOUT_DAYS_PER_WEEK) else prefs[Keys.WORKOUT_DAYS_PER_WEEK] = profile.workoutDaysPerWeek
             if (profile.waterTargetMl == null) prefs.remove(Keys.WATER_TARGET_ML) else prefs[Keys.WATER_TARGET_ML] = profile.waterTargetMl
+            if (profile.diseaseIds.isEmpty()) prefs.remove(Keys.DISEASE_IDS) else prefs[Keys.DISEASE_IDS] = profile.diseaseIds
             prefs[Keys.ONBOARDING_COMPLETED] = profile.onboardingCompleted
         }
     }

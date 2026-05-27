@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.seally.camera.ExerciseType
+import com.example.seally.health.DiseaseGuidance
 import com.example.seally.ui.components.AppScreenBackground
 
 @Composable
@@ -31,6 +32,7 @@ fun DumbbellWorkoutsScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onExerciseSelected: (ExerciseType) -> Unit = {},
+    diseaseIds: Set<String> = emptySet(),
 ) {
     Box(
         modifier = modifier.fillMaxSize()
@@ -85,24 +87,28 @@ fun DumbbellWorkoutsScreen(
                     title = "Squat",
                     details = "Side-view squat depth and form checker",
                     color = Color(0xFFDE7C64),
+                    warningFor = DiseaseGuidance.exerciseNotRecommendedFor(ExerciseType.SQUAT, diseaseIds),
                     onClick = { onExerciseSelected(ExerciseType.SQUAT) }
                 )
                 WorkoutPlanCard(
                     title = "Plank",
                     details = "Core alignment and hold feedback checker",
                     color = Color(0xFF4D8EFF),
+                    warningFor = DiseaseGuidance.exerciseNotRecommendedFor(ExerciseType.PLANK, diseaseIds),
                     onClick = { onExerciseSelected(ExerciseType.PLANK) }
                 )
                 WorkoutPlanCard(
                     title = "Pull-up",
                     details = "Dead hang to top-position feedback checker",
                     color = Color(0xFF63B95B),
+                    warningFor = DiseaseGuidance.exerciseNotRecommendedFor(ExerciseType.PULLUP, diseaseIds),
                     onClick = { onExerciseSelected(ExerciseType.PULLUP) }
                 )
                 WorkoutPlanCard(
                     title = "Push-up",
                     details = "Depth and body-line feedback checker",
                     color = Color(0xFF6E56CF),
+                    warningFor = DiseaseGuidance.exerciseNotRecommendedFor(ExerciseType.PUSHUP, diseaseIds),
                     onClick = { onExerciseSelected(ExerciseType.PUSHUP) }
                 )
                 
@@ -117,6 +123,7 @@ private fun WorkoutPlanCard(
     title: String,
     details: String,
     color: Color,
+    warningFor: List<String> = emptyList(),
     onClick: () -> Unit,
 ) {
     Surface(
@@ -162,6 +169,14 @@ private fun WorkoutPlanCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (warningFor.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Not recommended for: ${warningFor.joinToString(", ")}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
