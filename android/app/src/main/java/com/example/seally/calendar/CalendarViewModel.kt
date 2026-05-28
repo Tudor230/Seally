@@ -27,6 +27,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+// Here we define the logic for the calendar screen and it's subpages
 data class ExerciseEntry(
     val name: String,
     val metric: String,

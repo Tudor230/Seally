@@ -41,6 +41,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+// Implementation of the interface and functionality for the calendar screen and the subpages of this
 enum class CalendarSubPage {
     CALENDAR,
     PRESET_MANAGER,
@@ -56,13 +57,20 @@ fun CalendarScreen(
     onBackClick: () -> Unit = {},
     viewModel: CalendarViewModel = viewModel()
 ) {
+    // Grabs the Android context, which is necessary to instantiate ViewModels ->  a class that is
+    // responsible for preparing and managing the data for an Activity
     val context = LocalContext.current
     val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(context))
     val profile by profileViewModel.profile.collectAsState()
     val diseaseIds = profile?.diseaseIds ?: emptySet()
+    // Used to launch background UI tasks, such as animating the calendar swipe
+    // (pagerState.animateScrollToPage) or showing snackbar messages
     val scope = rememberCoroutineScope()
+    //manages the state of the pop-up messages at the bottom of the screen. For example,
+    // it is triggered if a user tries to save a preset without a valid name
     val snackbarHostState = remember { SnackbarHostState() }
-    
+
+    // Uses rememberSaveable, the app remembers which page you were on even if you rotate your phone
     var currentSubPage by rememberSaveable { mutableStateOf(CalendarSubPage.CALENDAR) }
     var editingPreset by remember { mutableStateOf<TrainingPresetUiModel?>(null) }
     var exercisePickerReturnPage by rememberSaveable { mutableStateOf(CalendarSubPage.WORKOUT_PLANNER) }
@@ -89,6 +97,8 @@ fun CalendarScreen(
         }
     }
 
+
+    // UI implementation for the calendar screen and its subpages
     Box(modifier = modifier.fillMaxSize()) {
         AppScreenBackground(assetPath = "backgrounds/calendar.png", overlayTransparency = 0.15f)
 
@@ -250,6 +260,8 @@ fun MainCalendarContent(
     val pageCount = 1200
     val startPage = pageCount / 2
     val pagerState = rememberPagerState(initialPage = startPage, pageCount = { pageCount })
+//    Used in order to know the month and year the user is currently looking at when they
+//    swipe left or right on your calendar.
     val currentMonth = remember(pagerState.currentPage) {
         startMonth.plusMonths((pagerState.currentPage - startPage).toLong())
     }

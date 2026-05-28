@@ -123,6 +123,7 @@ object DiseaseGuidance {
         return exerciseNotRecommendedFor(exerciseType, diseaseIds)
     }
 
+//  Used for associating exercise names with their types and the body category you want to train
     private fun exerciseTypeFromName(exerciseName: String): ExerciseType? {
         val normalized = exerciseName.trim().lowercase()
         if (normalized.isBlank()) return null
