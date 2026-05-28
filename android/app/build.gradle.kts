@@ -92,6 +92,7 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.7.0")
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.runtime)
 
     // Needed for java.time on minSdk < 26
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")

@@ -45,7 +45,7 @@ import com.example.seally.data.local.entity.TrainingPresetExerciseEntity
         CalendarCompletionLogEntity::class,
         SealHiddenPointDailyEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -73,7 +73,9 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "seally_app.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_5, MIGRATION_4_5)
+                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { mInstance = it }
             }
@@ -186,6 +188,198 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent(),
                 )
             }
+        }
+
+        private val MIGRATION_3_5 = object : androidx.room.migration.Migration(3, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                recreateAllTables(database)
+            }
+        }
+
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                recreateAllTables(database)
+            }
+        }
+
+        private fun recreateAllTables(database: SupportSQLiteDatabase) {
+            database.execSQL("PRAGMA foreign_keys=OFF")
+
+            database.execSQL("DROP TABLE IF EXISTS `calendar_completion_log`")
+            database.execSQL("DROP TABLE IF EXISTS `daily_goal_progress`")
+            database.execSQL("DROP TABLE IF EXISTS `training_preset_exercise`")
+            database.execSQL("DROP TABLE IF EXISTS `nutrition_food_entry`")
+            database.execSQL("DROP TABLE IF EXISTS `calendar_plan_entry`")
+            database.execSQL("DROP TABLE IF EXISTS `calendar_day_completion`")
+            database.execSQL("DROP TABLE IF EXISTS `training_preset`")
+            database.execSQL("DROP TABLE IF EXISTS `nutrition_log`")
+            database.execSQL("DROP TABLE IF EXISTS `exercise_log`")
+            database.execSQL("DROP TABLE IF EXISTS `target`")
+            database.execSQL("DROP TABLE IF EXISTS `profile`")
+            database.execSQL("DROP TABLE IF EXISTS `seal_hidden_point_daily`")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `profile` (
+                    `id` TEXT NOT NULL,
+                    `first_name` TEXT NOT NULL,
+                    `last_name` TEXT NOT NULL,
+                    `weight_kg` REAL NOT NULL,
+                    `height_cm` INTEGER NOT NULL,
+                    `age` INTEGER NOT NULL,
+                    `activity_level` TEXT NOT NULL,
+                    `exp` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `target` (
+                    `goal_name` TEXT NOT NULL,
+                    `target_value` REAL NOT NULL,
+                    PRIMARY KEY(`goal_name`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `exercise_log` (
+                    `id` TEXT NOT NULL,
+                    `exercise_name` TEXT NOT NULL,
+                    `quantity` REAL NOT NULL,
+                    `metric` TEXT NOT NULL,
+                    `date` TEXT NOT NULL,
+                    `preset_name` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `nutrition_log` (
+                    `date` TEXT NOT NULL,
+                    `water_ml` INTEGER NOT NULL DEFAULT 0,
+                    `calories_kcal` INTEGER NOT NULL DEFAULT 0,
+                    `protein_g` REAL NOT NULL DEFAULT 0,
+                    `carbs_g` REAL NOT NULL DEFAULT 0,
+                    `fats_g` REAL NOT NULL DEFAULT 0,
+                    `sugar_g` REAL NOT NULL DEFAULT 0,
+                    `fiber_g` REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`date`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `nutrition_food_entry` (
+                    `id` TEXT NOT NULL,
+                    `date` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `meal` TEXT NOT NULL,
+                    `calories` INTEGER NOT NULL,
+                    `protein` INTEGER NOT NULL,
+                    `carbs` INTEGER NOT NULL,
+                    `fats` INTEGER NOT NULL,
+                    `sugars` INTEGER NOT NULL,
+                    `fibers` INTEGER NOT NULL,
+                    `is_healthy` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_nutrition_food_entry_date` ON `nutrition_food_entry` (`date`)")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `training_preset` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `training_preset_exercise` (
+                    `id` TEXT NOT NULL,
+                    `preset_id` TEXT NOT NULL,
+                    `exercise_name` TEXT NOT NULL,
+                    `metric` TEXT NOT NULL,
+                    `quantity` REAL NOT NULL,
+                    `sort_order` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`),
+                    FOREIGN KEY(`preset_id`) REFERENCES `training_preset`(`id`) ON UPDATE CASCADE ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_training_preset_exercise_preset_id` ON `training_preset_exercise` (`preset_id`)")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `calendar_plan_entry` (
+                    `id` TEXT NOT NULL,
+                    `date` TEXT NOT NULL,
+                    `exercise_name` TEXT NOT NULL,
+                    `metric` TEXT NOT NULL,
+                    `quantity` REAL NOT NULL,
+                    `sort_order` INTEGER NOT NULL,
+                    `preset_name` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_calendar_plan_entry_date` ON `calendar_plan_entry` (`date`)")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `calendar_day_completion` (
+                    `date` TEXT NOT NULL,
+                    `is_completed` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`date`)
+                )
+                """.trimIndent(),
+            )
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `calendar_completion_log` (
+                    `date` TEXT NOT NULL,
+                    `log_id` TEXT NOT NULL,
+                    PRIMARY KEY(`date`, `log_id`),
+                    FOREIGN KEY(`log_id`) REFERENCES `exercise_log`(`id`) ON UPDATE CASCADE ON DELETE CASCADE,
+                    FOREIGN KEY(`date`) REFERENCES `calendar_day_completion`(`date`) ON UPDATE CASCADE ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_calendar_completion_log_log_id` ON `calendar_completion_log` (`log_id`)")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `daily_goal_progress` (
+                    `goal_name` TEXT NOT NULL,
+                    `date` TEXT NOT NULL,
+                    `progress_value` REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`goal_name`, `date`),
+                    FOREIGN KEY(`goal_name`) REFERENCES `target`(`goal_name`) ON UPDATE CASCADE ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_daily_goal_progress_goal_name` ON `daily_goal_progress` (`goal_name`)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_daily_goal_progress_date` ON `daily_goal_progress` (`date`)")
+
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `seal_hidden_point_daily` (
+                    `date` TEXT NOT NULL,
+                    `daily_delta` INTEGER NOT NULL DEFAULT 0,
+                    `calories_over_goal` INTEGER NOT NULL DEFAULT 0,
+                    `had_workout` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`date`)
+                )
+                """.trimIndent(),
+            )
+
+            database.execSQL("PRAGMA foreign_keys=ON")
         }
     }
 }

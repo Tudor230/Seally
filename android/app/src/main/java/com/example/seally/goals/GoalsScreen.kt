@@ -101,36 +101,6 @@ enum class GoalMetric(
     val mDefaultLabels: List<String>,
     val mIcon: androidx.compose.ui.graphics.vector.ImageVector,
 ) {
-    STEPS(
-        mLabel = "Steps",
-        mUnit = "steps",
-        mAccentColor = Color(0xFF63B95B),
-        mChartType = GoalChartType.BAR,
-        mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedTarget = 10_000f,
-        mDefaultLabels = listOf("M", "T", "W", "T", "F", "S", "S"),
-        mIcon = Icons.Default.TrendingUp
-    ),
-    WEIGHT(
-        mLabel = "Weight",
-        mUnit = "kg",
-        mAccentColor = Color(0xFFE39A55),
-        mChartType = GoalChartType.BAR,
-        mGoalDirection = GoalDirection.AT_MOST,
-        mSuggestedTarget = 68f,
-        mDefaultLabels = emptyList(),
-        mIcon = Icons.Default.Flag
-    ),
-    RUNNING(
-        mLabel = "Running",
-        mUnit = "km",
-        mAccentColor = Color(0xFFB17AE0),
-        mChartType = GoalChartType.BAR,
-        mGoalDirection = GoalDirection.AT_LEAST,
-        mSuggestedTarget = 50f,
-        mDefaultLabels = emptyList(),
-        mIcon = Icons.Default.TrendingUp
-    ),
     WATER(
         mLabel = "Water",
         mUnit = "ml",
@@ -840,9 +810,6 @@ private fun AddGoalDialog(
 
     val mCommonSenseDirections = remember {
         mapOf(
-            GoalMetric.STEPS to GoalDirection.AT_LEAST,
-            GoalMetric.WEIGHT to GoalDirection.AT_MOST,
-            GoalMetric.RUNNING to GoalDirection.AT_LEAST,
             GoalMetric.WATER to GoalDirection.AT_LEAST,
             GoalMetric.CALORIES to GoalDirection.AT_MOST,
             GoalMetric.PROTEIN to GoalDirection.AT_LEAST,
@@ -1241,6 +1208,9 @@ class GoalsViewModel(
                             0f
                         }
                     }
+                    val chartLabels = (HISTORY_POINT_COUNT - 1 downTo 0).map { offset ->
+                        LocalDate.now().minusDays(offset.toLong()).dayOfWeek.name.take(1)
+                    }
                     GoalUiModel(
                         mId = metric.toGoalId(),
                         mMetric = metric,
@@ -1248,7 +1218,7 @@ class GoalsViewModel(
                         mCurrentValue = todayCurrentValue,
                         mTargetValue = target.targetValue.toFloat(),
                         mHistoryValues = recentProgress,
-                        mChartLabels = metric.mDefaultLabels,
+                        mChartLabels = chartLabels,
                     )
                 }
                 mGoalsState.value = uiModels.sortedBy { it.mId }
