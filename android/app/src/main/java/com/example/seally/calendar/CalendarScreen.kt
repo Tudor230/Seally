@@ -551,6 +551,8 @@ private fun CalendarSubPageHeader(
 
 @Composable
 fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> Unit, onEditPreset: (TrainingPresetUiModel) -> Unit, onDeletePreset: (String) -> Unit, onAddPreset: () -> Unit) {
+    var presetToDelete by remember { mutableStateOf<TrainingPresetUiModel?>(null) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         CalendarSubPageHeader(
             title = "My Presets",
@@ -593,7 +595,7 @@ fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> U
                                 Text(text = preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text(text = "${preset.exercises.size} exercises", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            IconButton(onClick = { onDeletePreset(preset.id) }) {
+                            IconButton(onClick = { presetToDelete = preset }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -608,6 +610,33 @@ fun PresetManagerPage(presets: List<TrainingPresetUiModel>, onBackClick: () -> U
                 Text("Create New Preset", fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (presetToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { presetToDelete = null },
+            title = { Text("Delete Preset?") },
+            text = { Text("Are you sure you want to delete '${presetToDelete?.name}'? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        presetToDelete?.id?.let { onDeletePreset(it) }
+                        presetToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { presetToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 
@@ -714,7 +743,8 @@ fun WorkoutPlannerPage(
     onPickExercise: (Int) -> Unit
 ) {
     var showPresetPicker by remember { mutableStateOf(false) }
-    
+    var showClearConfirm by remember { mutableStateOf(false) }
+
     // Group exercises by preset for visual organization
     val groupedExercises = remember(draftExercises.toList()) {
         val groups = mutableListOf<Pair<String?, MutableList<ExerciseEntry>>>()
@@ -828,7 +858,7 @@ fun WorkoutPlannerPage(
             
             if (draftExercises.isNotEmpty()) {
                 TextButton(
-                    onClick = onClear, 
+                    onClick = { showClearConfirm = true },
                     modifier = Modifier.fillMaxWidth(), 
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { 
@@ -887,6 +917,33 @@ fun WorkoutPlannerPage(
                 }
             }
         }
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Clear Plan?") },
+            text = { Text("Are you sure you want to remove all exercises from this day's plan?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearConfirm = false
+                        onClear()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Clear All")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 
