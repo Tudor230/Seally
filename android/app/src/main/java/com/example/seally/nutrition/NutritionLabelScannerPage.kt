@@ -71,6 +71,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
 
+/** Result from scanning a nutrition label or barcode. */
 data class NutritionLabelScanResult(
     val name: String,
     // Per-serving values (used for quarter/half/full/multiple serving options)
@@ -93,11 +94,13 @@ data class NutritionLabelScanResult(
 
 private const val NUTRITION_SCANNER_LOG_TAG = "NutritionScanner"
 
+/** Types of objects detected in live camera preview. */
 private enum class LiveDetectionType {
     Barcode,
     NutritionLabel,
 }
 
+/** Bounding box coordinates normalized to 0..1 range. */
 private data class NormalizedBoundingBox(
     val left: Float,
     val top: Float,
@@ -105,16 +108,19 @@ private data class NormalizedBoundingBox(
     val bottom: Float,
 )
 
+/** Result from live camera detection indicating type and bounds. */
 private data class LiveDetectionResult(
     val type: LiveDetectionType,
     val bounds: NormalizedBoundingBox,
 )
 
+/** Result from barcode detection with all detected values. */
 private data class BarcodeCaptureResult(
     val allValues: List<String>,
     val selectedValue: String?,
 )
 
+/** Camera scanner page for barcode and nutrition label OCR detection. */
 @Composable
 fun NutritionLabelScannerPage(
     onBack: () -> Unit,
@@ -438,6 +444,7 @@ fun NutritionLabelScannerPage(
     }
 }
 
+/** Overlay canvas drawing a colored bounding box around detected objects. */
 @Composable
 private fun LiveDetectionOverlay(
     detection: LiveDetectionResult,
@@ -487,6 +494,7 @@ private fun LiveDetectionOverlay(
     }
 }
 
+/** Content shown when camera permission has not been granted. */
 @Composable
 private fun PermissionRequiredContent(
     onRequestPermission: () -> Unit,
@@ -532,6 +540,7 @@ private fun PermissionRequiredContent(
     }
 }
 
+/** Full-screen loading overlay with spinner and status message. */
 @Composable
 private fun ScannerLoadingOverlay(
     message: String,
@@ -574,9 +583,11 @@ private fun ScannerLoadingOverlay(
 
 // ... (rest of the engines and parser code remains the same as it's logic, not UI)
 
+/** On-device OCR engine for reading text from nutrition labels. */
 private class OnDeviceNutritionOcrEngine {
     private val mRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+    /** Detects and returns text from a bitmap image. */
     suspend fun detectText(bitmap: Bitmap): Result<String> {
         return runCatching {
             val detectedText = suspendCancellableCoroutine<String> { continuation ->
@@ -601,14 +612,17 @@ private class OnDeviceNutritionOcrEngine {
         }
     }
 
+    /** Releases the underlying text recognizer resources. */
     fun release() {
         mRecognizer.close()
     }
 }
 
+/** On-device barcode scanner engine using ML Kit. */
 private class OnDeviceBarcodeScannerEngine {
     private val mScanner = BarcodeScanning.getClient()
 
+    /** Detects barcodes in a bitmap and returns the first valid value. */
     suspend fun detectBarcode(bitmap: Bitmap): Result<BarcodeCaptureResult> {
         return runCatching {
             val barcodes = suspendCancellableCoroutine<List<Barcode>> { continuation ->
@@ -635,11 +649,13 @@ private class OnDeviceBarcodeScannerEngine {
         }
     }
 
+    /** Releases the barcode scanner resources. */
     fun release() {
         mScanner.close()
     }
 }
 
+/** Engine for real-time barcode and nutrition label detection from camera frames. */
 private class OnDeviceLiveDetectionEngine {
     private val mBarcodeScanner = BarcodeScanning.getClient()
     private val mTextRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -656,6 +672,7 @@ private class OnDeviceLiveDetectionEngine {
         "sugar",
     )
 
+    /** Analyzes a camera frame for barcode or nutrition label content. */
     @OptIn(ExperimentalGetImage::class)
     fun analyze(
         imageProxy: ImageProxy,
@@ -747,11 +764,13 @@ private class OnDeviceLiveDetectionEngine {
             }
     }
 
+    /** Releases scanner and recognizer resources. */
     fun release() {
         mBarcodeScanner.close()
         mTextRecognizer.close()
     }
 
+    /** Merges a list of bounding rectangles into one encompassing rect. */
     private fun mergeRectangles(rectangles: List<Rect>): Rect? {
         if (rectangles.isEmpty()) return null
         val left = rectangles.minOf { rect -> rect.left }
@@ -762,7 +781,9 @@ private class OnDeviceLiveDetectionEngine {
     }
 }
 
+/** Client for fetching product nutrition data from Open Food Facts API. */
 private class OpenFoodFactsApiClient {
+    /** Fetches product nutrition data from Open Food Facts by barcode. */
     suspend fun fetchProductByBarcode(barcode: String): Result<NutritionLabelScanResult> {
         return withContext(Dispatchers.IO) {
             runCatching {
@@ -840,6 +861,7 @@ private class OpenFoodFactsApiClient {
         }
     }
 
+    /** Reads the first numeric value found among the given keys. */
     private fun JSONObject.readNumericValue(vararg keys: String): Float? {
         keys.forEach { key ->
             if (!has(key)) return@forEach
@@ -855,6 +877,7 @@ private class OpenFoodFactsApiClient {
     }
 }
 
+/** Parser for extracting nutrition values from raw OCR text. */
 private object NutritionLabelParser {
     private val mValueWithUnitRegex = Regex(
         """(\d{1,4}(?:[.,]\d{1,2})?)\s*(kcal|cal|kj|g|mg|gram|grams)?""",
@@ -866,6 +889,7 @@ private object NutritionLabelParser {
         "nutrition", "calorie", "energy", "protein", "carb", "fat", "sugar", "fiber", "sodium", "serving", "per "
     )
 
+    /** Parses raw OCR text into a structured NutritionLabelScanResult. */
     fun parse(rawText: String): NutritionLabelScanResult? {
         val lines = rawText.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
         if (lines.isEmpty()) return null
@@ -894,6 +918,7 @@ private object NutritionLabelParser {
         )
     }
 
+    /** Extracts a food product name from the first few OCR lines. */
     private fun extractFoodName(lines: List<String>): String {
         return lines.take(6).firstOrNull { line ->
             val normalized = line.lowercase()
@@ -904,6 +929,7 @@ private object NutritionLabelParser {
         }.orEmpty()
     }
 
+    /** Extracts calorie value from OCR text, falling back to kJ conversion. */
     private fun extractCalories(lines: List<String>, rawText: String): Int {
         mCaloriesRegex.find(rawText)?.groupValues?.getOrNull(1)?.let(::parseNumber)?.let { if (it > 0) return it }
         val kcalFromRows = extractValueNearKeyword(lines, listOf("calories", "energy", "kcal"), setOf("kcal", "cal"))
@@ -913,6 +939,7 @@ private object NutritionLabelParser {
         return 0
     }
 
+    /** Extracts a macro nutrient value by searching near keywords. */
     private fun extractMacroValue(lines: List<String>, rawText: String, keywords: List<String>): Int {
         val fromRows = extractValueNearKeyword(lines, keywords, setOf("g", "gram", "grams"))
         if (fromRows > 0) return fromRows
@@ -922,6 +949,7 @@ private object NutritionLabelParser {
         return 0
     }
 
+    /** Searches for a numeric value near a keyword, preferring specified units. */
     private fun extractValueNearKeyword(lines: List<String>, keywords: List<String>, preferUnits: Set<String>): Int {
         val indexes = lines.mapIndexedNotNull { index, line -> if (keywords.any { line.lowercase().contains(it) }) index else null }
         indexes.forEach { index ->
@@ -939,5 +967,6 @@ private object NutritionLabelParser {
         return 0
     }
 
+    /** Parses a string to an integer, handling comma as decimal separator. */
     private fun parseNumber(value: String): Int = value.replace(",", ".").toFloatOrNull()?.roundToInt() ?: 0
 }

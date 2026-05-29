@@ -38,6 +38,7 @@ import com.example.seally.ui.components.AppScreenBackground
 import com.example.seally.ui.components.TopHeader
 import java.time.LocalDate
 
+/** Main exercises screen with workout of the day, dumbbell page, and calendar. */
 @Composable
 fun ExercisesScreen(
     modifier: Modifier = Modifier,

@@ -90,6 +90,7 @@ private const val GOAL_FATS = "FATS"
 private const val GOAL_SUGARS = "SUGARS"
 private const val GOAL_FIBERS = "FIBERS"
 
+/** Pages available in the nutrition section. */
 enum class NutritionPage {
     Kitchen,
     Food,
@@ -97,6 +98,7 @@ enum class NutritionPage {
     Camera,
 }
 
+/** Meal types for classifying food entries throughout the day. */
 enum class MealType(val label: String, val icon: String) {
     Breakfast("Breakfast", "🍳"),
     Lunch("Lunch", "🍱"),
@@ -104,6 +106,7 @@ enum class MealType(val label: String, val icon: String) {
     Dinner("Dinner", "🍛"),
 }
 
+/** Portion size options for scanned food items. */
 private enum class ScannedQuantityOption(val label: String) {
     Quarter("1/4"),
     Half("1/2"),
@@ -112,6 +115,7 @@ private enum class ScannedQuantityOption(val label: String) {
     Grams("Grams"),
 }
 
+/** Resolved quantity with multiplier for scaling scanned nutrition values. */
 private data class ScannedQuantity(
     val multiplier: Float,
     val isValid: Boolean,
@@ -119,6 +123,7 @@ private data class ScannedQuantity(
     val summary: String,
 )
 
+/** Represents a single food entry logged by the user. */
 data class FoodEntry(
     val id: String = "",
     val name: String,
@@ -134,17 +139,20 @@ data class FoodEntry(
     val isHealthy: Boolean,
 )
 
+/** Rating categories indicating how healthy a meal is. */
 enum class MealRatingCategory {
     Good,
     Medium,
     Bad,
 }
 
+/** Score and category for a meal's nutritional quality. */
 private data class MealRating(
     val rating: Int,
     val category: MealRatingCategory,
 )
 
+/** ViewModel managing nutrition state, food entries, water tracking, and XP computation. */
 class NutritionViewModel(application: Application) : AndroidViewModel(application) {
     private val mNutritionLogRepository = NutritionLogRepository(application)
     private val mNutritionFoodEntryRepository = NutritionFoodEntryRepository(application)
@@ -194,18 +202,22 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         observeGoalTargets()
     }
 
+    /** Navigates to the food tracking page. */
     fun openFoodPage() {
         mCurrentPage = NutritionPage.Food
     }
 
+    /** Navigates to the water tracking page. */
     fun openWaterPage() {
         mCurrentPage = NutritionPage.Water
     }
 
+    /** Navigates to the camera scanner page. */
     fun openCameraPage() {
         mCurrentPage = NutritionPage.Camera
     }
 
+    /** Logs a manually entered food entry to the repository. */
     fun addManualFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
             mLastAddedFoodRatingCategory = foodEntry.ratingCategory
@@ -225,6 +237,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Logs a scanned food entry and returns to the food page. */
     fun addScannedFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
             mLastAddedFoodRatingCategory = foodEntry.ratingCategory
@@ -245,26 +258,31 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Adds water intake for the current day. */
     fun addWater(addedAmount: Int) {
         viewModelScope.launch {
             mNutritionLogRepository.addWater(mCurrentDate, addedAmount)
         }
     }
 
+    /** Removes a food entry by its ID. */
     fun removeFood(foodEntry: FoodEntry) {
         viewModelScope.launch {
             mNutritionFoodEntryRepository.removeEntry(foodEntry.id)
         }
     }
 
+    /** Subtracts water intake for the current day. */
     fun removeWater(removedAmount: Int) {
         viewModelScope.launch {
             mNutritionLogRepository.addWater(mCurrentDate, -removedAmount)
         }
     }
 
+    /** Returns true if the current page is not the kitchen overview. */
     fun canNavigateBackInNutrition(): Boolean = mCurrentPage != NutritionPage.Kitchen
 
+    /** Navigates back to the previous logical page in the nutrition flow. */
     fun navigateBackInNutrition() {
         mCurrentPage = when (mCurrentPage) {
             NutritionPage.Kitchen -> NutritionPage.Kitchen
@@ -273,6 +291,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Finalizes XP for the previous day if not yet finalized. */
     private fun finalizePreviousDayXpIfNeeded() {
         viewModelScope.launch {
             val dataStore = getApplication<Application>().nutritionDataStore
@@ -303,6 +322,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Shows the seal celebration overlay for 2 seconds after adding food. */
     private fun triggerSealCelebration() {
         mSealCelebrationJob?.cancel()
         mShouldShowSealCelebration = true
@@ -312,6 +332,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Observes water log and food entries from the database. */
     private fun observePersistedNutrition() {
         viewModelScope.launch {
             mNutritionLogRepository.observeByDate(mCurrentDate).collectLatest { log ->
@@ -333,6 +354,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Syncs summed food macros into the nutrition log table. */
     private suspend fun syncNutritionLogFromFoodEntries() {
         val mExisting = mNutritionLogRepository.getByDate(mCurrentDate)
         val mWaterMl = mExisting?.waterMl ?: mPersistedWaterMl
@@ -350,6 +372,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
+    /** Pushes current nutrition totals to the daily goal progress tracker. */
     private fun syncNutritionGoalsProgress() {
         viewModelScope.launch {
             val calories = mPersistedFoodEntries.sumOf { it.calories }.toDouble()
@@ -382,11 +405,13 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** Returns the water target in ml, defaulting to 2500 if not set. */
     private suspend fun resolveWaterTargetMl(): Int {
         val waterGoalTarget = mTargetRepository.getByGoalName("WATER")?.targetValue?.roundToInt()
         return (waterGoalTarget ?: DEFAULT_WATER_TARGET_ML).coerceAtLeast(1)
     }
 
+    /** Recalculates and stores the projected XP for today's nutrition. */
     private suspend fun updateTodayPendingXpProjection() {
         val projectedNutritionXp = XpCalculators.nutritionDailyXp(
             calories = mPersistedFoodEntries.sumOf { it.calories },
@@ -403,6 +428,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
         )
         mXpProjectionRepository.setTodayPendingXp(projectedNutritionXp + projectedWaterXp)
     }
+    /** Observes goal target changes and updates local state. */
     private fun observeGoalTargets() {
         viewModelScope.launch {
             mTargetRepository.observeTargets().collectLatest { targets ->
@@ -419,6 +445,7 @@ class NutritionViewModel(application: Application) : AndroidViewModel(applicatio
     }
 }
 
+/** Converts a database entity to a FoodEntry with computed rating. */
 private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
     val parsedMeal = runCatching { MealType.valueOf(meal) }.getOrDefault(MealType.Breakfast)
     val rating = calculateMealRating(
@@ -445,6 +472,7 @@ private fun NutritionFoodEntryEntity.toFoodEntry(): FoodEntry {
     )
 }
 
+/** Main nutrition screen hosting kitchen, food, water, and camera sub-pages. */
 @Composable
 fun NutritionScreen(
     modifier: Modifier = Modifier,
@@ -582,6 +610,7 @@ fun NutritionScreen(
     }
 }
 
+/** Kitchen overview showing calorie and water progress with action buttons. */
 @Composable
 private fun KitchenMainPage(
     caloriesConsumed: Int,
@@ -670,6 +699,7 @@ private fun KitchenMainPage(
     }
 }
 
+/** A card displaying a metric value, target, and progress bar. */
 @Composable
 private fun StatCard(
     label: String,
@@ -745,6 +775,7 @@ private fun StatCard(
     }
 }
 
+/** Food tracking page with macro overview, meal cards, and add/scan actions. */
 @Composable
 private fun FoodTrackingPage(
     foods: List<FoodEntry>,
@@ -874,6 +905,7 @@ private fun FoodTrackingPage(
     }
 }
 
+/** Panel showing calorie ring, macro mini-stats, and secondary stats. */
 @Composable
 private fun MacroOverviewPanel(
     calories: Int, calorieTarget: Int?,
@@ -969,6 +1001,7 @@ private fun MacroOverviewPanel(
     }
 }
 
+/** Small circular stat for a single macro nutrient. */
 @Composable
 private fun MacroMiniStat(label: String, value: Int, target: Int?, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1003,6 +1036,7 @@ private fun MacroMiniStat(label: String, value: Int, target: Int?, color: Color)
     }
 }
 
+/** Horizontal stat row with label and linear progress bar. */
 @Composable
 private fun SecondaryMacroStat(label: String, value: Int, target: Int?, modifier: Modifier = Modifier) {
     val hasTarget = target != null && target > 0
@@ -1026,6 +1060,7 @@ private fun SecondaryMacroStat(label: String, value: Int, target: Int?, modifier
     }
 }
 
+/** Card for a meal type showing its food entries with ratings and warnings. */
 @Composable
 private fun MealCard(
     mealType: MealType,
@@ -1169,6 +1204,7 @@ private fun MealCard(
     }
 }
 
+/** Water tracking page with intake ring, quantity selector, and add/remove actions. */
 @Composable
 private fun WaterTrackingPage(
     waterConsumedMl: Int,
@@ -1423,6 +1459,7 @@ private fun WaterTrackingPage(
     }
 }
 
+/** Camera page that scans barcodes / labels and presents the scanned food sheet. */
 @Composable
 private fun CameraTrackingPage(
     onBack: () -> Unit,
@@ -1451,6 +1488,7 @@ private fun CameraTrackingPage(
     }
 }
 
+/** Bottom sheet for manually adding a food entry with optional lookup. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddFoodSheet(
@@ -1688,6 +1726,7 @@ private fun AddFoodSheet(
     }
 }
 
+/** Outlined text field for entering a single nutrition value. */
 @Composable
 private fun NutritionField(
     value: String,
@@ -1718,6 +1757,7 @@ private fun NutritionField(
     )
 }
 
+/** Bottom sheet for reviewing and adjusting a scanned food entry before saving. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddScannedFoodSheet(
@@ -1954,6 +1994,7 @@ private fun AddScannedFoodSheet(
     }
 }
 
+/** Segmented control for selecting between multiple options. */
 @Composable
 private fun <T> ModernSegmentedSelector(
     options: List<T>,
@@ -2002,6 +2043,7 @@ private fun <T> ModernSegmentedSelector(
     }
 }
 
+/** Label displaying a single nutrition value with unit. */
 @Composable
 private fun NutritionValueLabel(label: String, value: String, unit: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.dp)) {
@@ -2010,6 +2052,7 @@ private fun NutritionValueLabel(label: String, value: String, unit: String) {
     }
 }
 
+/** Calculates a meal rating score and category from macro values. */
 private fun calculateMealRating(
     calories: Int,
     protein: Int,
@@ -2081,6 +2124,7 @@ private fun calculateMealRating(
     )
 }
 
+/** Resolves the selected quantity option into a multiplier and validity. */
 private fun calculateScannedQuantity(
     option: ScannedQuantityOption,
     multipleServingsText: String,
@@ -2144,16 +2188,19 @@ private fun calculateScannedQuantity(
     }
 }
 
+/** Parses a positive decimal number from a string, returns null if invalid. */
 private fun parsePositiveDecimal(value: String): Float? {
     val normalized = value.trim().replace(",", ".")
     val parsedValue = normalized.toFloatOrNull() ?: return null
     return parsedValue.takeIf { it > 0f }
 }
 
+/** Scales a nutrition value by a multiplier, clamping to zero. */
 private fun scaleNutritionValue(baseValue: Int, multiplier: Float): Int {
     return (baseValue * multiplier).roundToInt().coerceAtLeast(0)
 }
 
+/** Formats a float for UI display, omitting decimals when round. */
 private fun formatFloatForUi(value: Float): String {
     val rounded = (value * 100f).roundToInt() / 100f
     return if (rounded % 1f == 0f) {

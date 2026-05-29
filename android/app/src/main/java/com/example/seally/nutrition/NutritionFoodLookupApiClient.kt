@@ -10,6 +10,7 @@ import kotlin.math.roundToInt
 
 private const val FOOD_LOOKUP_BASE_URL = "https://seally.onrender.com/nutrition/lookup"
 
+/** Macros returned from the food lookup API. */
 data class NutritionLookupMacros(
     val calories: Int,
     val protein: Int,
@@ -19,7 +20,9 @@ data class NutritionLookupMacros(
     val sugars: Int,
 )
 
+/** Client for looking up nutrition macros by food name from the backend API. */
 class NutritionFoodLookupApiClient {
+    /** Looks up nutrition macros for a food name via the backend API. */
     suspend fun lookupByName(foodName: String): NutritionLookupMacros = withContext(Dispatchers.IO) {
         val query = foodName.trim()
         require(query.isNotBlank()) { "Food name is required." }
@@ -57,6 +60,7 @@ class NutritionFoodLookupApiClient {
         }
     }
 
+    /** Reads a numeric macro value from JSON, rounding and clamping to zero. */
     private fun JSONObject.readRoundedMacro(key: String): Int {
         val numericValue = when (val value = opt(key)) {
             is Number -> value.toDouble()
